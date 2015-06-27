@@ -1,4 +1,4 @@
-package uk.co.cacoethes.util
+package uk.co.cacoethes.lazybones.util
 
 import groovy.transform.CompileStatic
 

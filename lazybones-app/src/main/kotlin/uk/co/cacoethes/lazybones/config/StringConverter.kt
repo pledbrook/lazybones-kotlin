@@ -3,7 +3,7 @@ package uk.co.cacoethes.lazybones.config
 /**
  * Created by pledbrook on 09/08/2014.
  */
-class StringConverter implements Converter<CharSequence> {
+class StringConverter : Converter<CharSequence> {
     @Override
     String toType(String value) {
         return value?.toString()

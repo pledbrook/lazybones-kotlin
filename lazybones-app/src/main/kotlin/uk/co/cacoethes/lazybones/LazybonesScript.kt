@@ -18,6 +18,7 @@ import java.util.logging.Logger
  */
 @Log
 class LazybonesScript extends Script {
+    val log = Logger.getLogger()
 
     protected static final String DEFAULT_ENCODING = "utf-8"
 

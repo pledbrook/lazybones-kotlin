@@ -1,4 +1,4 @@
-package uk.co.cacoethes.util
+package uk.co.cacoethes.lazybones.util
 
 /**
  * Enumeration representing the various naming conventions, including the two

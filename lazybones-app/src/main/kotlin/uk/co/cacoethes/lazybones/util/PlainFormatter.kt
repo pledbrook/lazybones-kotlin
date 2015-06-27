@@ -1,4 +1,4 @@
-package uk.co.cacoethes.util
+package uk.co.cacoethes.lazybones.util
 
 import java.util.logging.Formatter
 import java.util.logging.LogRecord

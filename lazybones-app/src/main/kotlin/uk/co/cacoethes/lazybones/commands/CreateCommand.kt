@@ -10,7 +10,7 @@ import uk.co.cacoethes.lazybones.config.Configuration
 import uk.co.cacoethes.lazybones.packagesources.PackageSource
 import uk.co.cacoethes.lazybones.packagesources.PackageSourceBuilder
 import uk.co.cacoethes.lazybones.scm.GitAdapter
-import uk.co.cacoethes.util.ArchiveMethods
+import uk.co.cacoethes.lazybones.util.ArchiveMethods
 import wslite.http.HTTPClientException
 
 import java.util.logging.Level

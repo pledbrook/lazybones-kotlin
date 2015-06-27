@@ -1,4 +1,4 @@
-package uk.co.cacoethes.util
+package uk.co.cacoethes.lazybones.util
 
 import org.apache.commons.compress.archivers.zip.ZipArchiveEntry
 import org.apache.commons.compress.archivers.zip.ZipFile

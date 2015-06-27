@@ -12,11 +12,10 @@ import wslite.rest.RESTClient
  * the Lazybones template repository for information on what packages are
  * available and to get extra information about them.
  */
-@Log
 class BintrayPackageSource implements PackageSource {
-    static final String TEMPLATE_BASE_URL = "http://dl.bintray.com/v1/content/"
-    static final String API_BASE_URL = "https://bintray.com/api/v1"
-    static final String PACKAGE_SUFFIX = "-template"
+    val TEMPLATE_BASE_URL = "http://dl.bintray.com/v1/content/"
+    val API_BASE_URL = "https://bintray.com/api/v1"
+    val PACKAGE_SUFFIX = "-template"
 
     final String repoName
     def restClient

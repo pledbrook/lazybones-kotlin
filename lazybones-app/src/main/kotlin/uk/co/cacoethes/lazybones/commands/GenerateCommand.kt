@@ -7,7 +7,7 @@ import org.apache.commons.io.FileUtils
 import uk.co.cacoethes.lazybones.config.Configuration
 import uk.co.cacoethes.lazybones.LazybonesScriptException
 import uk.co.cacoethes.lazybones.PackageNotFoundException
-import uk.co.cacoethes.util.ArchiveMethods
+import uk.co.cacoethes.lazybones.util.ArchiveMethods
 
 import java.util.logging.Level
 

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package uk.co.cacoethes.util;
+package uk.co.cacoethes.lazybones.util;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -91,6 +91,11 @@ public class AntPathMatcher {
     /** Set the path separator to use for pattern parsing. Default is "/", as in Ant. */
     public void setPathSeparator(String pathSeparator) {
         this.pathSeparator = (pathSeparator != null ? pathSeparator : DEFAULT_PATH_SEPARATOR);
+    }
+
+    public AntPathMatcher pathSeparator(String pathSeperator) {
+        setPathSeparator(pathSeperator);
+        return this;
     }
 
     /** Whether to trim tokenized paths and patterns. */

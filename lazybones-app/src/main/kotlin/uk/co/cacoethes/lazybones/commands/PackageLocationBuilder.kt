@@ -5,7 +5,7 @@ import org.apache.commons.io.FilenameUtils
 import uk.co.cacoethes.lazybones.PackageInfo
 import uk.co.cacoethes.lazybones.PackageNotFoundException
 import uk.co.cacoethes.lazybones.packagesources.PackageSource
-import uk.co.cacoethes.util.UrlUtils
+import uk.co.cacoethes.lazybones.util.UrlUtils
 
 /**
  * Builds a PackageLocation object based on the command info from the
