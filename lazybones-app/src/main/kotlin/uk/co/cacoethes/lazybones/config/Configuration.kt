@@ -2,7 +2,11 @@ package uk.co.cacoethes.lazybones.config
 
 import groovy.json.JsonBuilder
 import groovy.json.JsonSlurper
+import groovy.util.ConfigObject
 import groovy.util.logging.Log
+import java.io.File
+import java.net.URI
+import java.util.*
 
 import java.util.logging.Level
 
@@ -22,61 +26,74 @@ import java.util.logging.Level
  * that a user can get quick feedback about typos and other errors in their config.
  * </p>
  */
-@Log
-@SuppressWarnings("MethodCount")
-class Configuration {
+class Configuration(
+        baseSettings : ConfigObject,
+        managedSettings : Map,
+        val overrideSettings : Map,
+        val validOptions : Map,
+        val jsonConfigFile : File) {
 
-    static final String SYSPROP_OVERRIDE_PREFIX = "lazybones."
-    static final String ENCODING = "UTF-8"
-    static final String JSON_CONFIG_FILENAME = "managed-config.json"
+    val SYSPROP_OVERRIDE_PREFIX = "lazybones."
+    val ENCODING = "UTF-8"
+    val JSON_CONFIG_FILENAME = "managed-config.json"
 
-    static final Map<String, Class> VALID_OPTIONS
-    static final String CONFIG_FILE_SYSPROP = "lazybones.config.file"
-    static final String NAME_SEPARATOR = "."
-    static final String NAME_SEPARATOR_REGEX = "\\."
+    val VALID_OPTIONS : Map<String, Class<*>>
+    val CONFIG_FILE_SYSPROP = "lazybones.config.file"
+    val NAME_SEPARATOR = "."
+    val NAME_SEPARATOR_REGEX = "\\."
 
-    static {
-        def options = [
-                "config.file": String,
-                "cache.dir": String,
-                "git.name": String,
-                "git.email": String,
-                "options.logLevel": String,
-                "options.verbose": Boolean,
-                "options.quiet": Boolean,
-                "options.info": Boolean,
-                "bintrayRepositories": String[],
-                "templates.mappings.*": URI,
-                "systemProp.*": Object]
+    private val settings : ConfigObject
+    private val managedSettings : ConfigObject
+
+    init {
+        val options : MutableMap<String, Class<*>> = hashMapOf(
+                "config.file" to javaClass<String>(),
+                "cache.dir" to javaClass<String>(),
+                "git.name" to javaClass<String>(),
+                "git.email" to javaClass<String>(),
+                "options.logLevel" to javaClass<String>(),
+                "options.verbose" to javaClass<Boolean>(),
+                "options.quiet" to javaClass<Boolean>(),
+                "options.info" to javaClass<Boolean>(),
+                "bintrayRepositories" to javaClass<Array<String>>(),
+                "templates.mappings.*" to javaClass<URI>(),
+                "systemProp.*" to javaClass<Any>())
 
         // These settings should only be active for the functional tests, not when the
         // application is being used normally.
-        if (System.getProperty(CONFIG_FILE_SYSPROP)?.endsWith("test-config.groovy")) {
-            options << [
-                    "test.my.option": Integer,
-                    "test.option.override": String,
-                    "test.option.array": String[],
-                    "test.integer.array": Integer[],
-                    "test.other.array": String[],
-                    "test.adding.array": String[]
-            ]
+        if (System.getProperty(CONFIG_FILE_SYSPROP)?.endsWith("test-config.groovy") ?: false) {
+            options.putAll(hashMapOf(
+                    "test.my.option" to javaClass<Int>(),
+                    "test.option.override" to javaClass<String>(),
+                    "test.option.array" to javaClass<Array<String>>(),
+                    "test.integer.array" to javaClass<Array<Int>>(),
+                    "test.other.array" to javaClass<Array<String>>(),
+                    "test.adding.array" to javaClass<Array<String>>()))
         }
 
         VALID_OPTIONS = Collections.unmodifiableMap(options)
+
+
+        this.settings = baseSettings
+        addConfigEntries(managedSettings, this.settings)
+        addConfigEntries(overrideSettings, this.settings)
+
+        this.managedSettings = new ConfigObject()
+        addConfigEntries managedSettings, this.managedSettings
+
+        processSystemProperties(this.settings)
+
+        // Validate the provided settings to ensure that they are known and that
+        // they have a value of the appropriate type.
+        def invalidOptions = this.settings.flatten().findAll { key, value ->
+            !validateSetting(key, validOptions, value)
+        }.keySet()
+
+        if (invalidOptions) {
+            throw new MultipleInvalidSettingsException(invalidOptions as List)
+        }
     }
-
-    private final File jsonConfigFile
-    private final ConfigObject settings
-    private final ConfigObject managedSettings
-    private final Map overrideSettings
-    private final Map validOptions
-
-    protected Configuration(
-            ConfigObject baseSettings,
-            Map overrideSettings,
-            Map managedSettings,
-            Map validOptions,
-            File jsonConfigFile) {
+    protected Configuration {
         this.validOptions = validOptions
         this.overrideSettings = overrideSettings
         this.jsonConfigFile = jsonConfigFile
@@ -444,7 +461,7 @@ class Configuration {
         return new ConfigSlurper().parse(cls.getResource("defaultConfig.groovy").text)
     }
 
-    protected static Map loadConfigFromSystemProperties(overrideConfig) {
+    protected fun loadConfigFromSystemProperties(overrideConfig : Any) : Map {
         return System.properties.findAll {
             it.key.startsWith(SYSPROP_OVERRIDE_PREFIX)
         }.each { String key, String value ->
@@ -458,8 +475,8 @@ class Configuration {
         }
     }
 
-    protected static File getJsonConfigFile(File userConfigFile) {
-        return new File(userConfigFile.parentFile, JSON_CONFIG_FILENAME)
+    protected fun getJsonConfigFile(userConfigFile : File) : File {
+        return File(userConfigFile.getParentFile(), JSON_CONFIG_FILENAME)
     }
 
     /**
@@ -467,12 +484,12 @@ class Configuration {
      * works recursively, so any values in the source map that are maps themselves
      * are treated as a set of sub-keys in the configuration.
      */
-    protected static void addConfigEntries(Map data, ConfigObject obj) {
-        data?.each { key, value ->
-            if (value instanceof Map) {
-                addConfigEntries(value, obj.getProperty(key))
+    protected fun addConfigEntries(data : Map<String, Any>, obj : ConfigObject) {
+        data.forEach { entry ->
+            if (entry.value is Map<*, *>) {
+                addConfigEntries(entry.value as Map<String, Any>, obj.getProperty(entry.key) as ConfigObject)
             }
-            else obj.setProperty(key, value)
+            else obj.setProperty(entry.key, entry.value)
         }
     }
 
@@ -482,7 +499,7 @@ class Configuration {
      * nested maps as well. For example, if two maps have the same keys and
      * sub-keys such as [one: [two: "test"]], then the key "one.two" is
      * considered to be a shared key. Note how the keys of sub-maps are
-     * referemced using dot ('.') notation.</p>
+     * referenced using dot ('.') notation.</p>
      * @param map1 The first map.
      * @param map2 The map to compare against the first map.
      * @return A list of the keys that both maps share. If either map is empty
@@ -491,14 +508,16 @@ class Configuration {
      * same way that <tt>ConfigObject</tt> keys are converted when the settings
      * are flattened.
      */
-    protected static List findIntersectKeys(Map map1, Map map2) {
-        def keys = map1.keySet().intersect(map2.keySet())
-        def result = new ArrayList(keys)
+    protected fun findIntersectKeys(map1 : Map<String, Any>, map2 : Map<String, Any>) : List<String> {
+        val keys = map1.keySet().intersect(map2.keySet())
+        val result : MutableList<String> = keys.toArrayList()
 
         for (k in keys) {
-            if (map1[k] instanceof Map && map2[k] instanceof Map) {
-                result.remove k
-                result += findIntersectKeys(map1[k], map2[k]).collect { k + NAME_SEPARATOR + it }
+            if (map1[k] is Map<*, *> && map2[k] is Map<*, *>) {
+                result.remove(k)
+                result.addAll(findIntersectKeys(
+                        map1[k] as Map<String, Any>,
+                        map2[k] as Map<String, Any>).map { k + NAME_SEPARATOR + it })
             }
         }
 

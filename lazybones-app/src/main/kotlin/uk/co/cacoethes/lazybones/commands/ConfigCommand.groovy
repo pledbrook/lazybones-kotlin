@@ -6,6 +6,7 @@ import joptsimple.OptionSet
 import uk.co.cacoethes.lazybones.config.Configuration
 import uk.co.cacoethes.lazybones.config.InvalidSettingException
 import uk.co.cacoethes.lazybones.config.UnknownSettingException
+import kotlin.IntRange as IRange
 
 /**
  * <p>This Lazybones command allows users to interact with the configuration settings
@@ -17,7 +18,7 @@ import uk.co.cacoethes.lazybones.config.UnknownSettingException
  * modify a setting that is overridden in this way.<p>
  */
 @Log
-class ConfigCommand extends AbstractCommand {
+class ConfigCommand  {
     static final String USAGE = """\
 USAGE: config set <option> <value> [<value> ...]
        config add <option> <value>
@@ -47,32 +48,32 @@ USAGE: config set <option> <value> [<value> ...]
 
     ConfigCommand(Configuration config) { this.config = config }
 
-    @Override
+//    @Override
     String getName() { return "config" }
 
-    @Override
+//    @Override
     String getDescription() {
         return "Displays general help, or help for a specific command."
     }
 
-    @Override
-    protected IntRange getParameterRange() {
+//    @Override
+    protected IRange getParameterRange() {
         // There is unfortunately no way to set an argument limit on a sub-command
         // basis, so we just use a suitable range for the 'config set' command. The
         // doExecute() method performs a secondary check.
-        return 1..Integer.MAX_VALUE
+        return new IRange(1, Integer.MAX_VALUE)
     }
 
-    @Override
+//    @Override
     protected OptionParser doAddToParser(OptionParser parser) {
         parser.accepts(ALL_OPT, "Used with `show` to display all setting values.")
         return parser
     }
 
-    @Override
+//    @Override
     protected String getUsage() { return USAGE }
 
-    @Override
+//    @Override
     @SuppressWarnings("DuplicateNumberLiteral")
     protected int doExecute(OptionSet cmdOptions, Map globalOptions, Configuration config) {
         def cmdArgs = cmdOptions.nonOptionArguments()

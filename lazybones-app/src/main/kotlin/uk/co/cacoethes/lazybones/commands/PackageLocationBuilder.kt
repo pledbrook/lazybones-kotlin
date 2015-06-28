@@ -1,69 +1,72 @@
 package uk.co.cacoethes.lazybones.commands
 
-import groovy.util.logging.Log
 import org.apache.commons.io.FilenameUtils
 import uk.co.cacoethes.lazybones.PackageInfo
 import uk.co.cacoethes.lazybones.PackageNotFoundException
 import uk.co.cacoethes.lazybones.packagesources.PackageSource
-import uk.co.cacoethes.lazybones.util.UrlUtils
+import uk.co.cacoethes.lazybones.util.isUrl
+import java.io.File
+import java.net.URI
+import java.util.logging.Logger
 
 /**
  * Builds a PackageLocation object based on the command info from the
  */
-@Log
-class PackageLocationBuilder {
-    final File cacheDir
+class PackageLocationBuilder(val cacheDir : File) {
+    val log = Logger.getLogger(this.javaClass.getName())
 
-    PackageLocationBuilder(File cacheDir) {
-        this.cacheDir = cacheDir
-    }
-
-    PackageLocation buildPackageLocation(String packageName, String version, List<PackageSource> packageSources) {
-        if (UrlUtils.isUrl(packageName)) {
+    fun buildPackageLocation(
+            packageName : String,
+            version : String,
+            packageSources : List<PackageSource>) : PackageLocation {
+        if (isUrl(packageName)) {
             return buildForUrl(packageName)
         }
 
-        buildForBintray(packageName, version, packageSources)
+        return buildForBintray(packageName, version, packageSources)
     }
 
-    private PackageLocation buildForUrl(String url) {
-        def packageName = FilenameUtils.getBaseName(new URI(url).path)
+    private fun buildForUrl(url : String) : PackageLocation {
+        val packageName = FilenameUtils.getBaseName(URI(url).getPath())
 
-        return new PackageLocation(remoteLocation: url, cacheLocation: cacheLocationPattern(packageName, null))
+        return PackageLocation(url, cacheLocationPattern(packageName, null))
     }
 
-    private PackageLocation buildForBintray(String packageName, String version, List<PackageSource> packageSources) {
-        if (version) {
-            String cacheLocation = cacheLocationPattern(packageName, version)
-            File cacheFile = new File(cacheLocation)
+    private fun buildForBintray(
+            packageName : String,
+            version : String,
+            packageSources : List<PackageSource>) : PackageLocation {
+        if (version.isNotBlank()) {
+            val cacheLocation = cacheLocationPattern(packageName, version)
+            val cacheFile = File(cacheLocation)
             if (cacheFile.exists()) {
-                return new PackageLocation(cacheLocation: cacheLocation)
+                return PackageLocation(null, cacheLocation)
             }
         }
 
-        PackageInfo packageInfo = getPackageInfo(packageName, packageSources)
-        String versionToDownload = version ?: packageInfo.latestVersion
-        String cacheLocation = cacheLocationPattern(packageName, versionToDownload)
-        String remoteLocation = packageInfo.source.getTemplateUrl(packageInfo.name, versionToDownload)
+        val packageInfo = getPackageInfo(packageName, packageSources)
+        val versionToDownload = version ?: packageInfo.latestVersion
+        val cacheLocation = cacheLocationPattern(packageName, versionToDownload)
+        val remoteLocation = packageInfo.source.getTemplateUrl(packageInfo.name, versionToDownload)
 
-        return new PackageLocation(remoteLocation: remoteLocation, cacheLocation: cacheLocation)
+        return PackageLocation(remoteLocation, cacheLocation)
     }
 
-    protected PackageInfo getPackageInfo(String packageName, List<PackageSource> packageSources) {
-        for (PackageSource packageSource in packageSources) {
-            log.fine "Searching for ${packageName} in ${packageSource}"
+    protected fun getPackageInfo(packageName : String, packageSources : List<PackageSource>) : PackageInfo {
+        for (packageSource in packageSources) {
+            log.fine("Searching for ${packageName} in ${packageSource}")
 
-            def pkgInfo = packageSource.fetchPackageInfo(packageName)
-            if (pkgInfo) {
-                log.fine "Found!"
+            val pkgInfo = packageSource.fetchPackageInfo(packageName)
+            if (pkgInfo != null) {
+                log.fine("Found!")
                 return pkgInfo
             }
         }
 
-        throw new PackageNotFoundException(packageName)
+        throw PackageNotFoundException(packageName)
     }
 
-    private String cacheLocationPattern(String name, String version) {
-        cacheDir.absolutePath + '/' + name + (version ? '-' + version : '') + '.zip'
+    private fun cacheLocationPattern(name : String, version : String?) : String {
+        return "${cacheDir.getAbsolutePath()}/$name${if (version?.isNotBlank() ?: false) "-" + version else ""}.zip"
     }
 }

@@ -5,13 +5,13 @@ package uk.co.cacoethes.lazybones.commands
  * arguments. This class represents such names and allows easy access to the
  * core template name + the qualifiers.
  */
-class TemplateArg {
-    private final List<String> tmplParts
+class TemplateArg(arg: String) {
+    val templateName : String
+    val qualifiers : List<String>
 
-    TemplateArg(String arg) {
-        tmplParts = arg.split(/::/) as List
+    init {
+        val tmplParts = arg.split("::".toRegex())
+        templateName = tmplParts.first()
+        qualifiers = tmplParts.takeLast(tmplParts.size() - 1)
     }
-
-    String getTemplateName() { return tmplParts.head() }
-    List<String> getQualifiers() { return tmplParts.tail() }
 }

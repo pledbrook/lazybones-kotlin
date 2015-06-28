@@ -1,6 +1,7 @@
 package uk.co.cacoethes.util
 
 import spock.lang.Specification
+import uk.co.cacoethes.lazybones.util.PlainFormatter
 
 import java.util.logging.Level
 import java.util.logging.LogRecord

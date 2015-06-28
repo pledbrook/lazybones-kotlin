@@ -1,6 +1,8 @@
 package uk.co.cacoethes.util
 
-import static uk.co.cacoethes.util.NameType.*
+import uk.co.cacoethes.lazybones.util.Naming
+
+import static uk.co.cacoethes.lazybones.util.NameType.*
 import spock.lang.Specification
 import spock.lang.Unroll
 

@@ -1,20 +1,19 @@
 package uk.co.cacoethes.lazybones.commands
 
 import uk.co.cacoethes.lazybones.config.Configuration
+import java.util.*
 
 /**
  *
  */
-final class Commands {
-    final static List<Command> getAll(Configuration config) {
-        return Collections.unmodifiableList([
-            new CreateCommand(config),
-            new ConfigCommand(config),
-            new GenerateCommand(),
-            new ListCommand(config),
-            new InfoCommand(),
-            new HelpCommand() ])
+object Commands {
+    fun getAll(config : Configuration) : List<Command> {
+        return listOf(
+            CreateCommand(config),
+//            ConfigCommand(config),
+            GenerateCommand(),
+            ListCommand(config),
+            InfoCommand(),
+            HelpCommand())
     }
-
-    private Commands() { }
 }

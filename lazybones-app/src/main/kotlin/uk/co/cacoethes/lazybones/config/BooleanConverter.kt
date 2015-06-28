@@ -3,20 +3,16 @@ package uk.co.cacoethes.lazybones.config
 /**
  * Created by pledbrook on 09/08/2014.
  */
-class BooleanConverter implements Converter<Boolean> {
-    @Override
-    @SuppressWarnings("BooleanMethodReturnsNull")
-    Boolean toType(String value) {
-        return value != null ? Boolean.valueOf(value) : null
+class BooleanConverter : Converter<Boolean> {
+    override fun toType(value : String) : Boolean {
+        return value.toBoolean()
     }
 
-    @Override
-    String toString(Boolean value) {
-        return value ? String.valueOf(value) : null
+    override fun toString(value : Boolean) : String {
+        return value.toString()
     }
 
-    @Override
-    boolean validate(Object value) {
-        return value == null || value instanceof Boolean
+    override fun validate(value : Any?) : Boolean {
+        return value is Boolean
     }
 }

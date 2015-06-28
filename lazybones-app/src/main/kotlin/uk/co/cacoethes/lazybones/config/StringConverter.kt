@@ -4,18 +4,15 @@ package uk.co.cacoethes.lazybones.config
  * Created by pledbrook on 09/08/2014.
  */
 class StringConverter : Converter<CharSequence> {
-    @Override
-    String toType(String value) {
-        return value?.toString()
-    }
-
-    @Override
-    String toString(CharSequence value) {
+    override fun toType(value : String) : CharSequence {
         return value
     }
 
-    @Override
-    boolean validate(Object value) {
-        return value == null || value instanceof CharSequence
+    override fun toString(value : CharSequence) : String {
+        return value.toString()
+    }
+
+    override fun validate(value : Any?) : Boolean {
+        return value is CharSequence
     }
 }

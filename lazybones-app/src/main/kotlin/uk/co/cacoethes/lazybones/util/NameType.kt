@@ -4,66 +4,77 @@ package uk.co.cacoethes.lazybones.util
  * Enumeration representing the various naming conventions, including the two
  * intermediate forms: camel case and lower case hyphenated.
  */
-enum NameType {
-    CAMEL_CASE,
-    PROPERTY(CAMEL_CASE, Naming.&propertyToCamelCase, Naming.&camelCaseToProperty),
-    HYPHENATED,
-    NATURAL(HYPHENATED, Naming.&naturalToHyphenated, Naming.&hyphenatedToNatural),
-    UNKNOWN(getUnknownFunction(), getUnknownFunction())
+enum class NameType(val intermediateType : NameType?,
+                    val toIntermediateFn : (String) -> String,
+                    val fromIntermediateFn : (String) -> String) {
+    CAMEL_CASE(),
+    HYPHENATED(),
+    UNKNOWN(unknownFunction, unknownFunction)
+    PROPERTY(
+            CAMEL_CASE,
+            { s : String -> Naming.propertyToCamelCase(s) },
+            { s : String -> Naming.camelCaseToProperty(s) }),
+    NATURAL(
+            HYPHENATED,
+            { s : String -> Naming.naturalToHyphenated(s) },
+            { s : String -> Naming.hyphenatedToNatural(s) })
 
-    private final NameType intermediateType
-    private final Closure toIntermediateFn
-    private final Closure fromIntermediateFn
+    companion object {
+        /**
+         * Returns an identity function that simply returns a name unchanged.
+         * This must be called as a method, not a property during initialisation
+         * of the enum.
+         */
+        private val identityFunction = { s: String -> s }
 
-    private NameType() {
-        this(null, getIdentityFunction(), getIdentityFunction())
+        /**
+         * Returns a special function that throws an exception if it's ever called.
+         * It should only be used by the UNKNOWN type. This must be called as a
+         * method, not a property during initialisation of the enum.
+         */
+        private val unknownFunction = { s: String ->
+            throw UnsupportedOperationException("Unable to convert to or from an unknown name type")
+        }
     }
 
-    private NameType(Closure toIntermediate, Closure fromIntermediate) {
-        this(null, toIntermediate, fromIntermediate)
-    }
+    constructor() : this(null, identityFunction, identityFunction)
 
-    private NameType(NameType intermediateType, Closure toIntermediate, Closure fromIntermediate) {
-        this.intermediateType = intermediateType ?: this
-        this.toIntermediateFn = toIntermediate
-        this.fromIntermediateFn = fromIntermediate
-    }
-
-    NameType getIntermediateType() { return this.intermediateType }
+    constructor(toIntermediate : (String) -> String, fromIntermediate : (String) -> String) :
+            this(null, toIntermediate, fromIntermediate)
 
     /**
      * Uses the assigned function to convert a name string from the current
      * type to its intermediate form.
      */
-    String toIntermediate(String s) {
-        return this.toIntermediateFn.call(s)
+    fun toIntermediate(s : String) : String {
+        return toIntermediateFn.invoke(s)
     }
 
     /**
      * Uses the assigned function to convert a name string from an intermediate
      * form to this type.
      */
-    String fromIntermediate(String s) {
-        return this.fromIntermediateFn.call(s)
+    fun fromIntermediate(s : String) : String {
+        return fromIntermediateFn.invoke(s)
     }
 
-    /**
-     * Returns an identity function that simply returns a name unchanged.
-     * This must be called as a method, not a property during initialisation
-     * of the enum.
-     */
-    private static Closure getIdentityFunction() {
-        return { String s -> return s }
-    }
+
 
     /**
-     * Returns a special function that throws an exception if it's ever called.
-     * It should only be used by the UNKNOWN type. This must be called as a
-     * method, not a property during initialisation of the enum.
+     * Converts a name in property form into its corresponding intermediate
+     * form, camel case.
      */
-    private static Closure getUnknownFunction() {
-        return { String s ->
-            throw new UnsupportedOperationException("Unable to convert to or from an unknown name type")
+    fun propertyToCamelCase(content : String) : String {
+        return content.capitalize()
+    }
+
+    fun camelCaseToProperty(content : String ) : String {
+        val upperBound = Math.min(content.length(), 3)
+        if (content.substring(0, upperBound-1).all { it.isUpperCase() }) {
+            return content
+        }
+        else {
+            return content.decapitalize()
         }
     }
 }

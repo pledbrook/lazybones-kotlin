@@ -1,7 +1,5 @@
 package uk.co.cacoethes.lazybones.util
 
-import groovy.transform.Immutable
-
 /**
  * <p>Provides static methods for converting between different forms of names,
  * such as camel case, hyphenated lower case, and natural. You can find the
@@ -15,7 +13,7 @@ import groovy.transform.Immutable
  * needed to handle multiple types.</p>
  * @author Peter Ledbrook
  */
-class Naming {
+object Naming {
 
     /**
      * Converts a string from one naming convention to another.
@@ -26,17 +24,8 @@ class Naming {
      * @return A new string representing {@code content} in the requested
      * form.
      */
-    static String convert(Map args, String content) {
-        if (!(args.from instanceof NameType)) {
-            throw new IllegalArgumentException("Invalid or no value for 'from' named argument: ${args.from}")
-        }
-
-        if (!(args.to instanceof NameType)) {
-            throw new IllegalArgumentException("Invalid or no value for 'to' named argument: ${args.to}")
-        }
-
-        NameWithType name = new NameWithType(NameType.UNKNOWN, content)
-        return name.from(args.from).to(args.to)
+    public fun convert(from : NameType, to : NameType, content : String) : String {
+        return NameWithType(NameType.UNKNOWN, content).from(from).to(to)
     }
 
     /**
@@ -52,25 +41,24 @@ class Naming {
      * @return An object that you can call {@code from()} on to specify the
      * current form of the given name.
      */
-    static NameWithType convert(String content) {
-        return new NameWithType(NameType.UNKNOWN, content)
+    fun convert(content : String) : NameWithType {
+        return NameWithType(NameType.UNKNOWN, content)
     }
 
     /**
      * Converts a name in camel case (such as HelloWorld) to the hyphenated
      * equivalent (hello-world).
      */
-    @SuppressWarnings('DuplicateStringLiteral')
-    protected static String camelCaseToHyphenated(String name) {
-        if (!name) return name
+    fun camelCaseToHyphenated(name : String) : String {
+        if (name.isBlank()) return name
 
-        def out = new StringBuilder(name.size() + 5)
-        def lexer = new BasicLexer(name)
+        val out = StringBuilder(name.length() + 5)
+        val lexer = BasicLexer(name)
 
-        out << lexer.nextWord()
-        for (String part = lexer.nextWord(); part; part = lexer.nextWord()) {
-            out << '-'
-            out << part
+        out append lexer.nextWord()
+        for (part in lexer) {
+            out append '-'
+            out append part
         }
         return out.toString()
     }
@@ -79,17 +67,15 @@ class Naming {
      * Converts a hyphenated name (such as hello-world) to the camel-case
      * equivalent (HelloWorld).
      */
-    protected static String hyphenatedToCamelCase(String name) {
-        if (!name) return name
+    fun hyphenatedToCamelCase(name : String) : String {
+        if (name.isBlank()) return name
 
-        def out = new StringBuffer()
-        def m = name =~ /-([a-zA-Z0-9])/
-        while (m) {
-            m.appendReplacement out, m.group(1).toUpperCase()
+        val out = StringBuilder()
+        "-([a-zA-Z0-9])".toRegex().replace(name) { m ->
+            m.groups[0]?.value?.capitalize() ?: ""
         }
-        m.appendTail out
 
-        out.replace(0, 1, name[0].toUpperCase())
+        out.replace(0, 1, name[0].toUpperCase().toString())
         return out.toString()
     }
 
@@ -97,50 +83,42 @@ class Naming {
      * Converts a name in hyphenated form to its natural form. Hyphenated is
      * the intermediate form for natural.
      */
-    @SuppressWarnings('DuplicateStringLiteral')
-    protected static String hyphenatedToNatural(String content) {
-        return content.split('-').collect {
-            def str = it[0].toUpperCase()
-            if (it.size() > 1) str += it[1..-1]
-            return str
-        }.join(' ')
+    fun hyphenatedToNatural(content : String) : String {
+        return content.split('-').map {
+            return it.capitalize()
+        }.join(" ")
     }
 
     /**
      * Converts a name in natural form into its corresponding intermediate
      * form, hyphenated.
      */
-    @SuppressWarnings('DuplicateStringLiteral')
-    @SuppressWarnings('UnnecessaryElseStatement')
-    protected static String naturalToHyphenated(String content) {
-        return content.split(' ').collect {
-            if (it.size() > 1 && Character.isUpperCase(it[1] as char)) return it
+    fun naturalToHyphenated(content : String) : String {
+        return content.split(' ').map {
+            if (it.length() > 1 && it[1].isUpperCase()) return it
             else return it.toLowerCase()
-        }.join('-')
+        }.join("-")
     }
 
     /**
      * Converts a name in property form into its corresponding intermediate
      * form, camel case.
      */
-    @SuppressWarnings('DuplicateStringLiteral')
-    protected static String propertyToCamelCase(String content) {
-        return content[0].toUpperCase() + (content.size() > 1 ? content[1..-1] : '')
+    fun propertyToCamelCase(content : String) : String {
+        return content.capitalize()
     }
 
     /**
      * Converts a name in camel case form into its property form. Camel case is
      * the intermediate form for property names.
      */
-    @SuppressWarnings('DuplicateStringLiteral')
-    @SuppressWarnings('UnnecessaryElseStatement')
-    protected static String camelCaseToProperty(String content) {
-        def upperBound = Math.min(content.size(), 3)
-        if (content[0..<upperBound].every { Character.isUpperCase(it as char) }) {
+    fun camelCaseToProperty(content : String ) : String {
+        val upperBound = Math.min(content.length(), 3)
+        if (content.substring(0, upperBound-1).all { it.isUpperCase() }) {
             return content
         }
         else {
-            return content[0].toLowerCase() + (content.size() > 1 ? content[1..-1] : '')
+            return content.decapitalize()
         }
     }
 
@@ -149,11 +127,7 @@ class Naming {
      * no verification that the given name string actually conforms to the given
      * type.
      */
-    @Immutable
-    private static class NameWithType {
-        NameType type
-        String content
-
+    private class NameWithType(val type : NameType, val content : String) {
         /**
          * Effectively assigns a name type to the current name string and
          * converts that string to its corresponding intermediate type. There
@@ -162,9 +136,8 @@ class Naming {
          * @return A new {@code NameType} object with the same name string
          * as this one, but with the assigned type.
          */
-        @SuppressWarnings('UnnecessaryElseStatement')
-        NameWithType from(NameType type) {
-            return new NameWithType(type.intermediateType, type.toIntermediate(content))
+        fun from(type : NameType) : NameWithType {
+            return NameWithType(type.intermediateType ?: type, type.toIntermediate(content))
         }
 
         /**
@@ -175,10 +148,10 @@ class Naming {
          * @param type The name type to convert the current name string to.
          * @return The converted name string.
          */
-        String to(NameType type) {
+        fun to(type : NameType) : String {
             // If the from and to types have different intermediate types, we
             // first need to convert between the two intermediate types.
-            def currentContent = this.content
+            var currentContent = this.content
             if (this.type.intermediateType == NameType.CAMEL_CASE && type.intermediateType == NameType.HYPHENATED) {
                 currentContent = camelCaseToHyphenated(currentContent)
             }
@@ -191,58 +164,72 @@ class Naming {
         }
     }
 
-    private static class BasicLexer {
-        static final int UPPER = 0
-        static final int LOWER = 1
-        static final int OTHER = 2
+    private class BasicLexer(val source : String) {
+        val UPPER = 0
+        val LOWER = 1
+        val OTHER = 2
 
-        private final String source
-        private int position
+        var position : Int = 0
 
-        BasicLexer(String source) {
-            this.source = source
+        fun iterator() : Iterator<String> {
+            return object : Iterator<String> {
+                init {
+                    if (position != 0) throw IllegalStateException("This lexer has already been iterated over")
+                }
+
+                var currentWord : String? = null
+
+                override fun next(): String {
+                    return currentWord!!
+                }
+
+                override fun hasNext(): Boolean {
+                    currentWord = nextWord()
+                    return currentWord != null
+                }
+            }
         }
 
-        String nextWord() {
-            int maxPos = source.size()
+        fun nextWord() : String? {
+            val maxPos = source.length()
             if (position == maxPos) return null
 
-            char ch = source[position]
-            def state = getType(ch as char)
+            val ch = source[position]
+            var state = getType(ch)
 
             // Start looking at the next characters
-            def pos = position + 1
+            var pos = position + 1
             while (pos < maxPos) {
                 // When this character is different to the one before,
                 // it is a word boundary unless this is a lower-case
                 // letter and the previous one was upper-case.
-                def newState = getType(source[pos] as char)
+                val newState = getType(source[pos])
                 if (newState != state && (state != UPPER || newState != LOWER)) break
 
                 // Look ahead if both the previous character and the current
                 // one are upper case. If, and only if, the next character is
                 // lower case, this character is treated as a word boundary.
                 if (state == UPPER && newState == UPPER &&
-                        (pos + 1) < maxPos && getType(source[pos + 1] as char) == LOWER) break
+                        (pos + 1) < maxPos && getType(source[pos + 1]) == LOWER) break
 
                 // Go to next character
                 state = newState
                 pos++
             }
 
-            def word = source[position..<pos]
+            var word = source.substring(position, pos)
             position = pos
 
             // Do we need to lower case this word?
-            if (ch.isUpperCase() && (word.size() == 1 || (word[1] as char).isLowerCase())) {
+            if (ch.isUpperCase() && (word.length() == 1 || word[1].isLowerCase())) {
                 word = word.toLowerCase()
             }
 
             return word
         }
 
-        private static int getType(char ch) {
-            return ch.isUpperCase() ? UPPER : (ch.isLowerCase() ? LOWER : OTHER)
+        private fun getType(ch : Char) : Int {
+            return if (ch.isUpperCase()) UPPER else (if (ch.isLowerCase()) LOWER else OTHER)
         }
     }
 }

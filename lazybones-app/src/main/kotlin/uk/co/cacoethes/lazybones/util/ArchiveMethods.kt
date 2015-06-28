@@ -2,6 +2,8 @@ package uk.co.cacoethes.lazybones.util
 
 import org.apache.commons.compress.archivers.zip.ZipArchiveEntry
 import org.apache.commons.compress.archivers.zip.ZipFile
+import java.io.File
+import java.io.FileOutputStream
 
 /**
  * This class contains some static utility methods defined in such a way that
@@ -9,98 +11,97 @@ import org.apache.commons.compress.archivers.zip.ZipFile
  * been shamelessly borrowed from Tim Yate's Groovy Common Extensions library
  * but modified to support retention of file permissions.
  */
-@groovy.transform.CompileStatic
-class ArchiveMethods {
-    private static final String EXCEPTION_TEXT = "File#unzip() has to be called on a *.zip file."
 
-    /**
-     * Unzips a file to a target directory, retaining the file permissions where
-     * possible. You can also provide a closure that acts as a filter, returning
-     * {@code true} if you want the file or directory extracted, {@code false}
-     * otherwise.
-     * @param self The zip file to extract.
-     * @param destination The directory to extract the zip to. Of course, it must
-     * be a directory, otherwise this method throws an IllegalArgumentException.
-     * @param filter (optional) A closure that acts as a filter. It must accept a
-     * single argument that is a File and return {@code true} if that zip entry
-     * should be extracted, or {@code false} otherwise.
-     */
-    static Collection<File> unzip(File self, File originalDestination, Closure<Boolean> filter = null) {
-        checkUnzipFileType(self)
-        checkUnzipDestination(originalDestination)
+val EXCEPTION_TEXT = "File#unzip() has to be called on a *.zip file."
 
-        // if destination directory is not given, we'll fall back to the parent directory of 'self'
-        def destination = originalDestination ?: new File(self.parent)
+/**
+ * Unzips a file to a target directory, retaining the file permissions where
+ * possible. You can also provide a closure that acts as a filter, returning
+ * {@code true} if you want the file or directory extracted, {@code false}
+ * otherwise.
+ * @param self The zip file to extract.
+ * @param destination The directory to extract the zip to. Of course, it must
+ * be a directory, otherwise this method throws an IllegalArgumentException.
+ * @param filter (optional) A closure that acts as a filter. It must accept a
+ * single argument that is a File and return {@code true} if that zip entry
+ * should be extracted, or {@code false} otherwise.
+ */
+public fun unzip(self: File, destination: File, filter: ((File) -> Boolean)?  = null) : Collection<File>{
+    checkUnzipFileType(self)
+    checkUnzipDestination(destination)
 
-        def zipFile = new ZipFile(self)
+    val zipFile = ZipFile(self)
 
-        try {
-            return unpackZipEntries(zipFile, destination, filter)
-        }
-        finally {
-            zipFile.close()
-        }
+    try {
+        return unpackZipEntries(zipFile, destination, filter)
     }
+    finally {
+        zipFile.close()
+    }
+}
 
-    protected static Collection<File> unpackZipEntries(ZipFile zipFile, File destination, Closure<Boolean> filter) {
-        def unzippedFiles = []
+fun unpackZipEntries(zipFile : ZipFile, destination : File, filter : ((File) -> Boolean)?) : Collection<File> {
+    val unzippedFiles : MutableList<File> = arrayListOf()
 
-        // The type coercion here is down to http://jira.codehaus.org/browse/GROOVY-6123
-        for (ZipArchiveEntry entry in (zipFile.entries as List<ZipArchiveEntry>)) {
-            final file = new File(destination, entry.name)
-            if (filter == null || filter(file)) {
-                if (entry.isDirectory()) {
-                    file.mkdirs()
-                }
-                else {
-                    file.parentFile?.mkdirs()
+    for (entry in zipFile.getEntries()) {
+        val file = File(destination, entry.getName())
+        if (filter == null || filter.invoke(file)) {
+            if (entry.isDirectory()) {
+                file.mkdirs()
+            }
+            else {
+                file.getParentFile()?.mkdirs()
+                val buf = ByteArray(255)
 
-                    def output = new FileOutputStream(file)
-                    output.withStream {
-                        output << zipFile.getInputStream(entry)
+                FileOutputStream(file).use { output ->
+                    zipFile.getInputStream(entry).use { input ->
+                        var count = input.read(buf)
+                        while (count != -1) {
+                            output.write(buf, 0, count)
+                            count = input.read(buf)
+                        }
                     }
                 }
-
-                unzippedFiles << file
-                updateFilePermissions(file, entry.unixMode)
             }
+
+            unzippedFiles.add(file)
+            updateFilePermissions(file, entry.getUnixMode())
         }
-
-        return unzippedFiles
     }
 
-    /**
-     * <p>Sets appropriate Unix file permissions on a file based on a 'mode'
-     * number, such as 0644 or 0755. Note that those numbers are in octal
-     * format!</p>
-     * <p>The left-most number represents the owner permission (1 = execute,
-     * 2 = write, 4 = read, 5 = read/exec, 6 = read/write, 7 = read/write/exec).
-     * The middle number represents the group permissions and the last number
-     * applies to everyone. In reality, because of limitations in the underlying
-     * Java API this method will only honour owner and everyone settings. The
-     * group permissions will be set to the same as those for everyone.</p>
-     */
-    static void updateFilePermissions(File self, long unixMode) {
-        self.setExecutable((unixMode & 0100) as Boolean, !(unixMode & 0001))
-        self.setReadable((unixMode & 0400) as Boolean, !(unixMode & 0004))
-        self.setWritable((unixMode & 0200) as Boolean, !(unixMode & 0002))
-    }
+    return unzippedFiles
+}
 
-    /**
-     * Checks that the given file is both a file (not a directory, link, etc)
-     * and that its name has a .zip extension.
-     */
-    private static void checkUnzipFileType(File self) {
-        if (!self.isFile()) throw new IllegalArgumentException(EXCEPTION_TEXT)
+/**
+ * <p>Sets appropriate Unix file permissions on a file based on a 'mode'
+ * number, such as 0644 or 0755. Note that those numbers are in octal
+ * format!</p>
+ * <p>The left-most number represents the owner permission (1 = execute,
+ * 2 = write, 4 = read, 5 = read/exec, 6 = read/write, 7 = read/write/exec).
+ * The middle number represents the group permissions and the last number
+ * applies to everyone. In reality, because of limitations in the underlying
+ * Java API this method will only honour owner and everyone settings. The
+ * group permissions will be set to the same as those for everyone.</p>
+ */
+public fun updateFilePermissions(self : File, unixMode : Int) : Unit {
+    self.setExecutable((unixMode and 0x40) != 0, unixMode and 0x01 == 0)
+    self.setReadable((unixMode and 0x100) != 0, unixMode and 0x04 == 0)
+    self.setWritable((unixMode and 0x80) != 0, unixMode and 0x02 == 0)
+}
 
-        def filename = self.name
-        if (!filename.toLowerCase().endsWith(".zip")) throw new IllegalArgumentException(EXCEPTION_TEXT)
-    }
+/**
+ * Checks that the given file is both a file (not a directory, link, etc)
+ * and that its name has a .zip extension.
+ */
+private fun checkUnzipFileType(self : File) {
+    if (!self.isFile()) throw IllegalArgumentException(EXCEPTION_TEXT)
 
-    /**
-     * Checks that the given file is a directory.
-     */
-    private static void checkUnzipDestination(File file) {
-        if (file && !file.isDirectory()) throw new IllegalArgumentException("'destination' has to be a directory.")
-    }
+    if (!self.getName().toLowerCase().endsWith(".zip")) throw IllegalArgumentException(EXCEPTION_TEXT)
+}
+
+/**
+ * Checks that the given file is a directory.
+ */
+private fun checkUnzipDestination(file : File) {
+    if (!file.isDirectory()) throw IllegalArgumentException("'destination' has to be a directory.")
 }

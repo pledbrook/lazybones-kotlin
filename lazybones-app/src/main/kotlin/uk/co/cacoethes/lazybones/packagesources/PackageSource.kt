@@ -11,16 +11,16 @@ interface PackageSource {
      * Returns a list of the available packages. If there are no packages, this
      * returns an empty list.
      */
-    List<String> listPackageNames()
+    fun listPackageNames() : List<String>
 
     /**
      * Returns details about a given package. If no package is found with the
      * given name, this returns {@code null}.
      */
-    PackageInfo fetchPackageInfo(String packageName)
+    fun fetchPackageInfo(packageName : String) : PackageInfo?
 
     /**
      * Returns the URL to download particular package and version from this package source
      */
-    String getTemplateUrl(String pkgName, String version)
+    fun getTemplateUrl(pkgName : String, version : String) : String
 }

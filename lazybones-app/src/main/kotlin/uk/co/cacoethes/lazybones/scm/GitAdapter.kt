@@ -3,37 +3,38 @@ package uk.co.cacoethes.lazybones.scm
 import groovy.util.logging.Log
 import org.ini4j.Wini
 import uk.co.cacoethes.lazybones.config.Configuration
+import java.io.*
+import java.util.logging.Logger
 
 /**
  * An SCM adapter for git. Make sure that when executing the external processes
  * you use the {@code text} property to ensure that the process output is fully
  * read.
  */
-@Log
-class GitAdapter implements ScmAdapter {
-    private static final String GIT = "git"
+class GitAdapter : ScmAdapter {
+    val GIT = "git"
+    val log = Logger.getLogger(this.javaClass.getName())
 
-    private final String userName
-    private final String userEmail
+    val userName : String
+    val userEmail : String
 
-    GitAdapter(Configuration config) {
+    constructor(config : Configuration) {
         // Load the current user's git config if it exists.
-        def configFile = new File(System.getProperty("user.home"), ".gitconfig")
+        val configFile = File(System.getProperty("user.home"), ".gitconfig")
         if (configFile.exists()) {
-            def ini = new Wini(configFile)
-            def userKey = "user"
+            val ini = Wini(configFile)
+            val userKey = "user"
             userName = ini.get(userKey, "name")
             userEmail = ini.get(userKey, "email")
         }
         else {
             // Use Lazybones config entries if they exist.
-            userName = config.getSetting("git.name") ?: "Unknown"
-            userEmail = config.getSetting("git.email") ?: "unknown@nowhere.net"
+            userName = config.getSetting("git.name")?.toString() ?: "Unknown"
+            userEmail = config.getSetting("git.email")?.toString() ?: "unknown@nowhere.net"
         }
     }
 
-    @Override
-    String getExclusionsFilename() {
+    override fun getExclusionsFilename() : String {
         return ".gitignore"
     }
 
@@ -41,9 +42,8 @@ class GitAdapter implements ScmAdapter {
      * Creates a new git repository in the given location by spawning an
      * external {@code git init} command.
      */
-    @Override
-    void initializeRepository(File location) {
-        execGit(["init"], location)
+    override fun initializeRepository(location : File) : Unit {
+        execGit(arrayListOf("init"), location)
     }
 
     /**
@@ -53,13 +53,12 @@ class GitAdapter implements ScmAdapter {
      * in.
      * @param message The commit message to use.
      */
-    @Override
-    void commitInitialFiles(File location, String message) {
-        def configCmd = "config"
-        execGit(["add", "."], location)
-        execGit([configCmd, "user.name", userName], location)
-        execGit([configCmd, "user.email", userEmail], location)
-        execGit(["commit", "-m", message], location)
+    override fun commitInitialFiles(location : File, message : String) : Unit {
+        val configCmd = "config"
+        execGit(arrayListOf("add", "."), location)
+        execGit(arrayListOf(configCmd, "user.name", userName), location)
+        execGit(arrayListOf(configCmd, "user.email", userEmail), location)
+        execGit(arrayListOf("commit", "-m", message), location)
     }
 
     /**
@@ -69,11 +68,37 @@ class GitAdapter implements ScmAdapter {
      * @param location The working directory for the command.
      * @return The return code from the process.
      */
-    private int execGit(List args, File location) {
-        def process = ((List) [GIT] + args).execute([], location)
-        def out = new StringWriter()
-        process.consumeProcessOutput out, out
-        log.finest out.toString()
-        return process.waitFor()
+    private fun execGit(args : List<String>, location : File) : Int {
+        val process = ProcessBuilder(arrayListOf(GIT) + args).directory(location).redirectErrorStream(true).start()
+        val out = StringWriter()
+        val stdout = consumeProcessStream(process.getInputStream(), out)
+        stdout.start()
+
+        val exitCode = process.waitFor()
+        stdout.join(1000)
+        log.finest(out.toString())
+        return exitCode
+    }
+
+    private fun consumeProcessStream(stream : InputStream, w : Writer) : Thread {
+        val buffer = CharArray(255)
+        return object : Thread() {
+            init {
+                setDaemon(true)
+            }
+
+            override fun run() {
+                val reader = InputStreamReader(stream)
+                var charsRead = 0
+                while (charsRead != -1) {
+                    charsRead = reader.read(buffer, 0, 256)
+                    if (charsRead > 0) {
+                        synchronized (w) {
+                            w.write(buffer, 0, charsRead)
+                        }
+                    }
+                }
+            }
+        }
     }
 }

@@ -3,19 +3,16 @@ package uk.co.cacoethes.lazybones.config
 /**
  * Created by pledbrook on 22/06/15.
  */
-class ObjectConverter implements Converter<Object> {
-    @Override
-    Object toType(String value) {
+class ObjectConverter : Converter<Any> {
+    override fun toType(value : String) : Any {
         return value
     }
 
-    @Override
-    String toString(Object value) {
+    override fun toString(value : Any) : String {
         return value?.toString()
     }
 
-    @Override
-    boolean validate(Object value) {
-        return true
+    override fun validate(value : Any?) : Boolean {
+        return value != null
     }
 }

@@ -1,4 +1,4 @@
-import static uk.co.cacoethes.util.NameType.*
+import static uk.co.cacoethes.lazybones.util.NameType.*
 
 log.warning "User should see this log message"
 

@@ -3,7 +3,6 @@ package uk.co.cacoethes.lazybones.commands
 import org.junit.Rule
 import org.junit.rules.TemporaryFolder
 import spock.lang.Specification
-import uk.co.cacoethes.lazybones.LazybonesMain
 import uk.co.cacoethes.lazybones.LazybonesScript
 
 /**

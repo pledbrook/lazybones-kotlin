@@ -6,23 +6,20 @@ package uk.co.cacoethes.lazybones.config;
  * configured type of the setting.
  */
 public class NoConverterFoundException extends RuntimeException {
-    private String settingName;
-    private Object value;
+    private Class requestedClass;
 
-    public NoConverterFoundException(String settingName, Object value) {
-        this(settingName, value, getDefaultMessage(settingName, value));
+    public NoConverterFoundException(final Class requestedClass) {
+        this(requestedClass, getDefaultMessage(requestedClass));
     }
 
-    public NoConverterFoundException(String settingName, Object value, String message) {
+    public NoConverterFoundException(final Class requestedClass, final String message) {
         super(message);
-        this.settingName = settingName;
-        this.value = value;
+        this.requestedClass = requestedClass;
     }
 
-    public String getSettingName() { return this.settingName; }
-    public Object getValue() { return this.value; }
+    public Class getRequestedClass() { return this.requestedClass; }
 
-    private static String getDefaultMessage(final String settingName, final Object value) {
-        return "The value '" + value + "' for configuration setting '" + settingName + "' is invalid";
+    private static String getDefaultMessage(final Class requestedClass) {
+        return "No converter could be found for values of type " + requestedClass.getName();
     }
 }

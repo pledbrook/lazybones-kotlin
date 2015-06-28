@@ -3,19 +3,16 @@ package uk.co.cacoethes.lazybones.config
 /**
  * Created by pledbrook on 09/08/2014.
  */
-class IntegerConverter implements Converter<Integer> {
-    @Override
-    Integer toType(String value) {
-        return value ? Integer.valueOf(value) : null
+class IntegerConverter : Converter<Int> {
+    override fun toType(value : String) : Int {
+        return value.toInt()
     }
 
-    @Override
-    String toString(Integer value) {
-        return value ? String.valueOf(value) : null
+    override fun toString(value : Int) : String {
+        return value.toString()
     }
 
-    @Override
-    boolean validate(Object value) {
-        return value == null || value instanceof Integer
+    override fun validate(value : Any?) : Boolean {
+        return value is Int
     }
 }

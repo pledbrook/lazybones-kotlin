@@ -1,54 +1,47 @@
 package uk.co.cacoethes.lazybones.commands
 
+import groovy.lang.Binding
+import groovy.lang.GroovyShell
+import groovy.lang.Script
 import groovy.text.SimpleTemplateEngine
 import groovy.util.logging.Log
 import org.codehaus.groovy.control.CompilerConfiguration
-import uk.co.cacoethes.lazybones.LazybonesMain
 import uk.co.cacoethes.lazybones.LazybonesScript
 import uk.co.cacoethes.lazybones.LazybonesScriptException
+import uk.co.cacoethes.lazybones.readVersion
 import uk.co.cacoethes.lazybones.scm.ScmAdapter
+import java.io.*
+import java.util.*
 
 /**
  * Sets up and runs a post-install script, managing properties provided by
  * parent templates, SCM integration, and setting the appropriate script base
  * class.
  */
-@Log
-class InstallationScriptExecuter {
-    static final String STORED_PROPS_FILENAME = "stored-params.properties"
-    static final String FILE_ENCODING = "UTF-8"
+class InstallationScriptExecuter(val scmAdapter : ScmAdapter?) {
+    val STORED_PROPS_FILENAME = "stored-params.properties"
+    val FILE_ENCODING = "UTF-8"
 
-    private ScmAdapter scmAdapter
+    constructor() : this(null)
 
-    InstallationScriptExecuter() {
-        this(null)
-    }
-
-    InstallationScriptExecuter(ScmAdapter adapter) {
-        this.scmAdapter = adapter
-    }
-
-    @SuppressWarnings("ParameterReassignment")
-    void runPostInstallScriptWithArgs(
-            Map variables,
-            List tmplQualifiers,
-            File targetDir,
-            File templateDir = null) {
-        templateDir = templateDir ?: targetDir
-
+    public fun runPostInstallScriptWithArgs(
+            variables : Map<String, Any?>,
+            tmplQualifiers : List<String>,
+            targetDir : File,
+            templateDir : File = targetDir) {
         // Run the post-install script if it exists. The user can pass variables
         // to the script via -P command line arguments. This also places
         // lazybonesVersion, lazybonesMajorVersion, and lazybonesMinorVersion
         // variables into the script binding.
         try {
-            def scriptVariables = new HashMap(variables)
-            scriptVariables << loadParentParams(templateDir)
-            scriptVariables << evaluateVersionScriptVariables()
+            val scriptVariables = HashMap(variables)
+            scriptVariables.putAll(loadParentParams(templateDir))
+            scriptVariables.putAll(evaluateVersionScriptVariables())
             runPostInstallScript(tmplQualifiers, targetDir, templateDir, scriptVariables)
-            initScmRepo(targetDir.absoluteFile)
+            initScmRepo(targetDir.getAbsoluteFile())
         }
-        catch (all) {
-            throw new LazybonesScriptException(all)
+        catch (all : Throwable) {
+            throw LazybonesScriptException(all)
         }
     }
 
@@ -57,12 +50,16 @@ class InstallationScriptExecuter {
      * package. Once the script has been run, it is deleted.
      * @param targetDir the target directory that contains the lazybones.groovy script
      * @param model a map of variables available to the script
-     * @return the lazybones script if it exists
+     * @return the lazybones script if it exists, otherwise {@code null}.
      */
-    Script runPostInstallScript(List tmplQualifiers, File targetDir, File templateDir, Map<String, String> model) {
-        def installScriptFile = new File(templateDir, "lazybones.groovy")
+    fun runPostInstallScript(
+            tmplQualifiers: List<String>,
+            targetDir : File,
+            templateDir : File,
+            model : Map<String, Any?>) : Script? {
+        val installScriptFile = File(templateDir, "lazybones.groovy")
         if (installScriptFile.exists()) {
-            def script = initializeScript(model, tmplQualifiers, installScriptFile, targetDir, templateDir)
+            val script = initializeScript(model, tmplQualifiers, installScriptFile, targetDir, templateDir)
             script.run()
             installScriptFile.delete()
 
@@ -73,68 +70,65 @@ class InstallationScriptExecuter {
         return null
     }
 
-    protected LazybonesScript initializeScript(
-            Map<String, String> model,
-            List<String> tmplQualifiers,
-            File scriptFile,
-            File targetDir,
-            File templateDir) {
-        def compiler = new CompilerConfiguration()
-        compiler.scriptBaseClass = LazybonesScript.name
+    protected fun initializeScript(
+            model : Map<String, Any?>,
+            tmplQualifiers : List<String>,
+            scriptFile : File,
+            targetDir : File,
+            templateDir : File) : LazybonesScript {
+        val compiler = CompilerConfiguration()
+        compiler.setScriptBaseClass(javaClass<LazybonesScript>().getName())
 
         // Can't use 'this' here because the static type checker does not
         // treat it as the class instance:
         //       https://jira.codehaus.org/browse/GROOVY-6162
-        def shell = new GroovyShell(getClass().classLoader, new Binding(model), compiler)
+        val shell = GroovyShell(this.javaClass.getClassLoader(), Binding(model), compiler)
 
         // Setter methods must be used here otherwise the physical properties on the
         // script object won't be set. I can only assume that the properties are added
         // to the script binding instead.
-        LazybonesScript script = shell.parse(scriptFile) as LazybonesScript
-        def groovyEngine = new SimpleTemplateEngine()
-        script.with {
-            registerDefaultEngine(groovyEngine)
-            registerEngine("gtpl", groovyEngine)
-            setTmplQualifiers(tmplQualifiers)
-            setProjectDir(targetDir)
-            setTemplateDir(templateDir)
-            setScmExclusionsFile(scmAdapter != null ? new File(targetDir, scmAdapter.exclusionsFilename) : null)
-        }
+        val script = shell.parse(scriptFile) as LazybonesScript
+        val groovyEngine = SimpleTemplateEngine()
+        script.registerDefaultEngine(groovyEngine)
+        script.registerEngine("gtpl", groovyEngine)
+        script.tmplQualifiers = tmplQualifiers
+        script.projectDir = targetDir
+        script.templateDir = templateDir
+        script.scmExclusionsFile = if (scmAdapter != null) File(targetDir, scmAdapter.getExclusionsFilename()) else null
         return script
     }
 
-    @SuppressWarnings("UnnecessaryGetter")
-    protected void persistParentParams(File dir, LazybonesScript script) {
+    protected fun persistParentParams(dir : File, script : LazybonesScript) {
         // Save this template's named parameters in a file inside a .lazybones
         // sub-directory of the unpacked template.
-        def lzbDir = new File(dir, ".lazybones")
+        val lzbDir = File(dir, ".lazybones")
         lzbDir.mkdirs()
-        new File(lzbDir, STORED_PROPS_FILENAME).withWriter(FILE_ENCODING) { Writer w ->
+        BufferedWriter(OutputStreamWriter(File(lzbDir, STORED_PROPS_FILENAME).outputStream(), FILE_ENCODING)).use { w ->
             // Need to use the getter method explicitly, otherwise it seems to
             // return an empty map.
-            (script.getParentParams() as Properties).store(w, "Lazybones saved template parameters")
+            script.parentParams.mapValues { v ->
+                v?.toString()
+            }.toProperties().store(w, "Lazybones saved template parameters")
         }
     }
 
-    protected Map loadParentParams(File templateDir) {
+    protected fun loadParentParams(templateDir : File) : Map<String, Any> {
         // Use the unpacked template's directory as the reference point and
         // then treat its parent directory as the location for the stored
-        // parameters. If `tempateDir` is CWD, then the parent directory will
-        // actually be null, in which case there is no store parameters file
+        // parameters. If `templateDir` is CWD, then the parent directory will
+        // actually be null, in which case there is no stored parameters file
         // (for example in the case of an unpacked project template rather
         // than a subtemplate).
-        def lzbDir = templateDir.parentFile
-        if (!lzbDir) return [:]
+        val lzbDir = templateDir.getParentFile()
+        if (lzbDir == null) return hashMapOf()
 
-        def paramsFile = new File(lzbDir, STORED_PROPS_FILENAME)
-        def props = new Properties()
+        val paramsFile = File(lzbDir, STORED_PROPS_FILENAME)
+        val props = Properties()
         if (paramsFile.exists()) {
-            paramsFile.withReader(FILE_ENCODING) { Reader r ->
-                props.load(r)
-            }
+            BufferedReader(InputStreamReader(paramsFile.inputStream(), FILE_ENCODING)).use { r -> props.load(r) }
         }
 
-        return [parentParams: props as Map]
+        return hashMapOf("parentParams" to props)
     }
 
     /**
@@ -142,21 +136,22 @@ class InstallationScriptExecuter {
      * {@code lazybonesMajorVersion}, and {@code lazybonesMinorVersion} variables
      * to a map that is then returned.
      */
-    protected Map evaluateVersionScriptVariables() {
-        def version = LazybonesMain.readVersion()
-        def vars = [lazybonesVersion: version]
+    protected fun evaluateVersionScriptVariables() : Map <String, Any> {
+        val version = readVersion()
+        val vars : MutableMap<String, Any> = hashMapOf("lazybonesVersion" to version)
 
-        def versionParts = version.split(/[\.\-]/)
-        assert versionParts.size() > 1
+        val versionParts = version.split("""[\.\-]""".toRegex())
+        assert(versionParts.size() > 1)
+        assert(versionParts.all { it.length() > 0 })
 
-        vars["lazybonesMajorVersion"] = versionParts[0]?.toInteger()
-        vars["lazybonesMinorVersion"] = versionParts[1]?.toInteger()
+        vars["lazybonesMajorVersion"] = versionParts[0].toInt()
+        vars["lazybonesMinorVersion"] = versionParts[1].toInt()
 
         return vars
     }
 
-    private void initScmRepo(File location) {
-        if (scmAdapter) {
+    private fun initScmRepo(location : File) {
+        if (scmAdapter != null) {
             scmAdapter.initializeRepository(location)
             scmAdapter.commitInitialFiles(location, "Initial commit")
         }

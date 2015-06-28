@@ -28,6 +28,7 @@ import static org.junit.Assert.assertEquals;
 
 import org.junit.Before;
 import org.junit.Test;
+import uk.co.cacoethes.lazybones.util.AntPathMatcher;
 
 /**
  * @author Alef Arendsen

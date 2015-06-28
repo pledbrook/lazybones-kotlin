@@ -1,14 +1,18 @@
 package uk.co.cacoethes.lazybones
 
 import groovy.io.FileType
+import groovy.lang.Script
+import groovy.lang.Writable
 import groovy.text.SimpleTemplateEngine
 import groovy.text.TemplateEngine
-import groovy.util.logging.Log
 import org.apache.commons.io.FilenameUtils
-import uk.co.cacoethes.util.AntPathMatcher
-import uk.co.cacoethes.util.Naming
+import uk.co.cacoethes.lazybones.util.AntPathMatcher
+import uk.co.cacoethes.lazybones.util.NameType
+import uk.co.cacoethes.lazybones.util.Naming
+import java.io.*
 
 import java.lang.reflect.Method
+import java.util.logging.Level
 import java.util.logging.Logger
 
 /**
@@ -16,11 +20,9 @@ import java.util.logging.Logger
  *
  * @author Tommy Barker
  */
-@Log
-class LazybonesScript extends Script {
-    val log = Logger.getLogger()
-
-    protected static final String DEFAULT_ENCODING = "utf-8"
+class LazybonesScript : Script() {
+    val log = Logger.getLogger(this.javaClass.getName())
+    val DEFAULT_ENCODING = "utf-8"
 
     /**
      * The target project directory. For project templates, this will be the
@@ -28,7 +30,7 @@ class LazybonesScript extends Script {
      * {@link #templateDir}. But for subtemplates, this will be the directory
      * of the project that the <code>generate</code> command is running in.
      */
-    File projectDir
+    var projectDir : File? = null
 
     /**
      * The location of the unpacked template. This will be the same as
@@ -37,58 +39,57 @@ class LazybonesScript extends Script {
      * that need filtering.
      * @since 0.7
      */
-    File templateDir
+    var templateDir : File? = null
 
     /**
      * Stores the values for {@link #ask(java.lang.String, java.lang.Object, java.lang.String)}
      * calls when a parameter name is specified.
      * @since 0.7
      */
-    Map parentParams = [:]
+    val parentParams : MutableMap<String, Any?> = hashMapOf()
 
     /**
      * @since 0.7
      */
-    List<String> tmplQualifiers = []
+    var tmplQualifiers : List<String> = arrayListOf()
 
     /**
      * The encoding/charset used by the files in the template. This is UTF-8
      * by default.
      */
-    String fileEncoding = DEFAULT_ENCODING
+    var fileEncoding = DEFAULT_ENCODING
 
-    File scmExclusionsFile
+    var scmExclusionsFile : File? = null
 
     /**
      * The reader stream from which user input will be pulled. Defaults to a
      * wrapper around stdin using the platform's default encoding/charset.
      */
-    Reader reader = new BufferedReader(new InputStreamReader(System.in))
+    var reader = BufferedReader(InputStreamReader(System.`in`))
 
-    private TemplateEngine templateEngine = new SimpleTemplateEngine()
+    private var templateEngine : TemplateEngine? = SimpleTemplateEngine()
 
-    private final Map registeredEngines = [:]
+    private val registeredEngines : MutableMap<String, TemplateEngine> = hashMapOf()
 
-    private final AntPathMatcher antPathMatcher =
-            new AntPathMatcher(pathSeparator: System.getProperty("file.separator"))
+    private val antPathMatcher = AntPathMatcher().pathSeparator(System.getProperty("file.separator"))
 
     /**
      * Provides access to the script's logger.
      * @since 0.9
      */
-    Logger getLog() { return this.log }
+//    val getLog() : Logger { return this.log }
 
     /**
      * Declares the list of file patterns that should be excluded from SCM.
      * @since 0.5
      */
-    void scmExclusions(String... exclusions) {
-        if (!scmExclusionsFile) return
+    fun scmExclusions(vararg exclusions : String) : Unit {
+        if (scmExclusionsFile == null) return
 
-        log.fine "Writing SCM exclusions file with: ${exclusions}"
-        scmExclusionsFile.withPrintWriter(fileEncoding) { writer ->
-            for (String exclusion in exclusions) {
-                writer.println exclusion
+        log.fine("Writing SCM exclusions file with: ${exclusions}")
+        scmExclusionsFile!!.printWriter().use { writer : PrintWriter ->
+            for (exclusion in exclusions) {
+                writer.println(exclusion)
             }
         }
     }
@@ -97,14 +98,22 @@ class LazybonesScript extends Script {
      * Converts a name from one convention to another, e.g. from camel case to
      * natural form ("TestString" to "Test String").
      * @param args Both {@code from} and {@code to} arguments are required and
-     * must be instances of {@link uk.co.cacoethes.util.NameType}.
+     * must be instances of {@link NameType}.
      * @param name The string to convert.
      * @return The converted string, or {@code null} if the given name is {@code
      * null}, or an empty string if the given string is empty.
      * @since 0.5
      */
-    String transformText(Map args, String name) {
-        return Naming.convert(args, name)
+    fun transformText(args : Map<String, Any?>, name : String) : String {
+        if (!(args["from"] is NameType)) {
+            throw IllegalArgumentException("Invalid or no value for 'from' named argument: ${args["from"]}")
+        }
+
+        if (!(args["to"] is NameType)) {
+            throw IllegalArgumentException("Invalid or no value for 'to' named argument: ${args["to"]}")
+        }
+
+        return Naming.convert(args["from"] as NameType, args["to"] as NameType, name)
     }
 
     /**
@@ -116,7 +125,7 @@ class LazybonesScript extends Script {
      * {@code SimpleTemplateEngine}.
      * @since 0.6
      */
-    void registerEngine(String suffix, TemplateEngine engine) {
+    fun registerEngine(suffix : String, engine : TemplateEngine) : Unit {
         this.registeredEngines[suffix] = engine
     }
 
@@ -130,7 +139,7 @@ class LazybonesScript extends Script {
      * {@link #clearDefaultEngine()} if you want to disable the default engine.
      * @since 0.6
      */
-    void registerDefaultEngine(TemplateEngine engine) {
+    fun registerDefaultEngine(engine : TemplateEngine) : Unit {
         this.templateEngine = engine
     }
 
@@ -142,7 +151,7 @@ class LazybonesScript extends Script {
      * even if they match the given pattern.
      * @since 0.6
      */
-    void clearDefaultEngine() {
+    fun clearDefaultEngine() : Unit {
         this.templateEngine = null
     }
 
@@ -155,11 +164,9 @@ class LazybonesScript extends Script {
      * @return the response
      * @since 0.4
      */
-    String ask(String message, String defaultValue = null) {
-        System.out.print message
-        String line = reader.readLine()
-
-        return line ?: defaultValue
+    fun ask(message : String, defaultValue : String? = null) : String? {
+        print(message)
+        return reader.readLine() ?: defaultValue
     }
 
     /**
@@ -177,13 +184,14 @@ class LazybonesScript extends Script {
      * whether the user entered a value.
      * @since 0.4
      */
-    String ask(String message, String defaultValue, String propertyName) {
-        def val = propertyName && binding.hasVariable(propertyName) ?
-                binding.getVariable(propertyName) :
-                ask(message, defaultValue)
+    fun ask(message : String, defaultValue : String?, propertyName : String) : String? {
+        val value = if (propertyName.isNotBlank() && getBinding().hasVariable(propertyName))
+            getBinding().getVariable(propertyName)?.toString()
+        else
+            ask(message, defaultValue)
 
-        parentParams[propertyName] = val
-        return val
+        parentParams[propertyName] = value
+        return value
     }
 
     /**
@@ -195,8 +203,8 @@ class LazybonesScript extends Script {
      * @param substitutionVariables
      * @since 0.4
      */
-    def filterFiles(String filePattern, Map substitutionVariables) {
-        String warningMessage = "The template you are using depends on a deprecated part of the API, [filterFiles], " +
+    fun filterFiles(filePattern : String, substitutionVariables : Map<String, Any?>) : Unit {
+        val warningMessage = "The template you are using depends on a deprecated part of the API, [filterFiles], " +
                 "which will be removed in Lazybones 1.0. Use a version of Lazybones prior to 0.5 with this template."
         log.warning(warningMessage)
         processTemplates(filePattern, substitutionVariables)
@@ -208,35 +216,37 @@ class LazybonesScript extends Script {
      * @return
      * @since 0.5
      */
-    def processTemplates(String filePattern, Map substitutionVariables) {
-        if (projectDir == null) throw new IllegalStateException("projectDir has not been set")
-        if (templateDir == null) throw new IllegalStateException("templateDir has not been set")
+    fun processTemplates(filePattern : String, substitutionVariables : Map<String, Any?>) : Script {
+        if (projectDir == null) throw IllegalStateException("projectDir has not been set")
+        if (templateDir == null) throw IllegalStateException("templateDir has not been set")
 
-        boolean atLeastOneFileFiltered = false
+        var atLeastOneFileFiltered = false
 
-        if (templateEngine) {
-            log.fine "Processing files matching the pattern ${filePattern} using the default template engine"
-            atLeastOneFileFiltered |= processTemplatesWithEngine(
+        if (templateEngine != null) {
+            log.fine("Processing files matching the pattern ${filePattern} using the default template engine")
+            atLeastOneFileFiltered = processTemplatesWithEngine(
                     findFilesByPattern(filePattern),
                     substitutionVariables,
-                    templateEngine,
-                    true)
+                    templateEngine!!,
+                    true) || atLeastOneFileFiltered
         }
 
         for (entry in registeredEngines) {
-            log.fine "Processing files matching the pattern ${filePattern} using the template engine for '${entry.key}'"
-            atLeastOneFileFiltered |= processTemplatesWithEngine(
+            log.fine("Processing files matching the pattern ${filePattern} using the " +
+                    "template engine for '${entry.key}'")
+            atLeastOneFileFiltered = processTemplatesWithEngine(
                     findFilesByPattern(filePattern + '.' + entry.key),
                     substitutionVariables,
                     entry.value,
-                    false)
+                    false) || atLeastOneFileFiltered
         }
 
         if (!atLeastOneFileFiltered) {
-            log.warning "No files filtered with file pattern [$filePattern] " +
-                    "and template directory [${templateDir.path}]"
+            log.warning("No files filtered with file pattern [$filePattern] " +
+                    "and template directory [${templateDir!!.path}]")
         }
 
+        // Not sure why this is here, but just in case someone actually relies on it...
         return this
     }
 
@@ -245,17 +255,12 @@ class LazybonesScript extends Script {
      * given Ant path pattern. The pattern should use forward slashes rather
      * than the platform file separator.
      */
-    private List<File> findFilesByPattern(String pattern) {
-        def filesToFilter = []
-        def filePatternWithUserDir = new File(templateDir.canonicalFile, pattern).path
+    private fun findFilesByPattern(pattern : String) : List<File> {
+        val filePatternWithUserDir = File(templateDir!!.getCanonicalFile(), pattern).path
 
-        templateDir.eachFileRecurse(FileType.FILES) { File file ->
-            if (antPathMatcher.match(filePatternWithUserDir, file.canonicalPath)) {
-                filesToFilter << file
-            }
-        }
-
-        return filesToFilter
+        return templateDir!!.walkTopDown().filter {
+            antPathMatcher.match(filePatternWithUserDir, it.canonicalPath)
+        }.asSequence().toList()
     }
 
     /**
@@ -270,20 +275,16 @@ class LazybonesScript extends Script {
      * suffix).
      * @throws IllegalArgumentException if any of the template file don't exist.
      */
-    protected boolean processTemplatesWithEngine(
-            Iterable<File> files,
-            Map properties,
-            TemplateEngine engine,
-            boolean replace) {
-        boolean atLeastOneFileFiltered = false
+    protected fun processTemplatesWithEngine(
+            files : List<File>,
+            properties : Map<String, Any?>,
+            engine : TemplateEngine,
+            replace : Boolean) : Boolean {
 
-        //have to use for instead of each, closure causes issues when script is used as base script
-        for (file in files) {
+        return files.fold(false) { filtered, file ->
             processTemplateWithEngine(file, properties, engine, replace)
-            atLeastOneFileFiltered = true
+            return true
         }
-
-        return atLeastOneFileFiltered
     }
 
     /**
@@ -297,25 +298,29 @@ class LazybonesScript extends Script {
      * the original, minus its final suffix (assumed to be a template-specific suffix).
      * @throws IllegalArgumentException if the template file doesn't exist.
      */
-    protected void processTemplateWithEngine(File file, Map properties, TemplateEngine engine, boolean replace) {
+    protected fun processTemplateWithEngine(
+            file : File,
+            properties : Map <String, Any?>,
+            engine : TemplateEngine,
+            replace : Boolean) : Unit {
         if (!file.exists()) {
-            throw new IllegalArgumentException("File ${file} does not exist")
+            throw IllegalArgumentException("File ${file} does not exist")
         }
-        log.fine "Filtering file ${file}${replace ? ' (replacing)' : ''}"
 
-        def template = makeTemplate(engine, file, properties)
+        log.fine("Filtering file ${file}${if (replace) " (replacing)" else ""}")
 
-        def targetFile = replace ? file : new File(file.parentFile, FilenameUtils.getBaseName(file.path))
-        targetFile.withWriter(fileEncoding) { writer ->
+        val template = makeTemplate(engine, file, properties)
+
+        val targetFile = if (replace) file else File(file.getParentFile(), FilenameUtils.getBaseName(file.path))
+        BufferedWriter(OutputStreamWriter(targetFile.outputStream(), fileEncoding)).use { writer ->
             template.writeTo(writer)
         }
 
         if (!replace) file.delete()
     }
 
-    @Override
-    Object run() {
-        throw new UnsupportedOperationException("${this.getClass().name} is not meant to be used directly. " +
+    override fun run() : Any {
+        throw UnsupportedOperationException("${this.javaClass.getName()} is not meant to be used directly. " +
                 "It should instead be used as a base script")
     }
 
@@ -327,8 +332,8 @@ class LazybonesScript extends Script {
      * be the name of a method on `LazybonesScript`.
      * @since 0.4
      */
-    boolean hasFeature(String featureName) {
-        return this.getClass().methods.any { Method method -> method.name == featureName }
+    fun hasFeature(featureName : String) : Boolean {
+        return this.javaClass.getMethods().any { method -> method.getName() == featureName }
     }
 
     /**
@@ -337,10 +342,10 @@ class LazybonesScript extends Script {
      * as soon as possible.
      * @deprecated Will be removed before Lazybones 1.0
      */
-    String getTargetDir() {
-        log.warning "The targetDir property is deprecated and should no longer be used by post-install scripts. " +
-                "Use `projectDir` instead."
-        return projectDir.path
+    fun getTargetDir() : String {
+        log.warning("The targetDir property is deprecated and should no longer be used by post-install scripts. " +
+                "Use `projectDir` instead.")
+        return projectDir!!.path
     }
 
     /**
@@ -348,7 +353,7 @@ class LazybonesScript extends Script {
      * for {@link #processTemplates(java.lang.String, java.util.Map)} to work
      * properly.
      */
-    protected AntPathMatcher getAntPathMatcher() { return this.antPathMatcher }
+//    protected AntPathMatcher getAntPathMatcher() { return this.antPathMatcher }
 
     /**
      * Creates a new template instance from a file.
@@ -358,8 +363,8 @@ class LazybonesScript extends Script {
      * in the map should correspond to a variable in the template.
      * @return The new template object
      */
-    protected Writable makeTemplate(TemplateEngine engine, File file, Map properties) {
-        file.withReader(fileEncoding) { Reader reader ->
+    protected fun makeTemplate(engine : TemplateEngine, file : File, properties : Map<String, Any?>) : Writable {
+        BufferedReader(InputStreamReader(file.inputStream(), fileEncoding)).use { reader ->
             return engine.createTemplate(reader).make(properties)
         }
     }

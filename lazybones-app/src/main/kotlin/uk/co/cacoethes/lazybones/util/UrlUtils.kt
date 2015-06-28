@@ -1,25 +1,18 @@
 package uk.co.cacoethes.lazybones.util
 
-import groovy.transform.CompileStatic
+import java.net.URI
+import java.net.URISyntaxException
 
 /**
- * Created by tbarker on 12/18/13.
+ * Determines whether the given package name is in fact a full blown URI,
+ * including scheme.
  */
-@CompileStatic
-class UrlUtils {
-
-    /**
-     * Determines whether the given package name is in fact a full blown URI,
-     * including scheme.
-     */
-    static boolean isUrl(String str) {
-        if (!str) return false
-        try {
-            def uri = new URI(str)
-            return uri.scheme
-        }
-        catch (URISyntaxException ignored) {
-            return false
-        }
+fun isUrl(str : String) : Boolean {
+    if (str.isEmpty()) return false
+    try {
+        return URI(str).getScheme() != null
+    }
+    catch (ignored : URISyntaxException) {
+        return false
     }
 }

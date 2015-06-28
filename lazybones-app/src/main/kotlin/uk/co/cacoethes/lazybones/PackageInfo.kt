@@ -5,17 +5,14 @@ import uk.co.cacoethes.lazybones.packagesources.PackageSource
 /**
  * Data class representing metadata about a Lazybones package.
  */
-@groovy.transform.Canonical
-class PackageInfo {
-    PackageSource source
-    String name
-    String latestVersion
-    List<String> versions
-    String owner
-    String description
-    String url
+data class PackageInfo(
+        val source : PackageSource,
+        val name : String,
+        val latestVersion : String,
+        val versions : List<String>,
+        val owner : String,
+        val description : String = "",
+        val url : String) {
 
-    Boolean hasVersion() {
-        versions as boolean
-    }
+    fun hasVersion() : Boolean = !versions.isEmpty()
 }

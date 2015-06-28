@@ -14,8 +14,8 @@ class PackageSourceBuilder {
      * @param config
      * @return
      */
-    List<PackageSource> buildPackageSourceList(Configuration config) {
-        List<String> repositoryList = (List) config.getSetting("bintrayRepositories")
-        return repositoryList.collect { new BintrayPackageSource(it) }
+    fun buildPackageSourceList(config : Configuration) : List<PackageSource> {
+        val repositoryList = config.getSetting("bintrayRepositories") as List<String>
+        return repositoryList.map { BintrayPackageSource(it) }
     }
 }

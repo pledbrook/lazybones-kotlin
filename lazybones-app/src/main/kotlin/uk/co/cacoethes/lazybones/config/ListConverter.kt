@@ -3,24 +3,19 @@ package uk.co.cacoethes.lazybones.config
 /**
  * Created by pledbrook on 09/08/2014.
  */
-class ListConverter : Converter<List> {
-    private final Class componentType
+class ListConverter<E>(val componentType : Class<E>) : Converter<List<E>> {
 
-    ListConverter(Class componentType) {
-        this.componentType = componentType
+    override fun toType(value : String) : List<E> {
+        val converter = Converters.getConverter(componentType) ?: throw NoConverterFoundException(componentType)
+        return value.split(""",\s+""".toRegex()).map { converter.toType(it) as E }
     }
 
-    override fun toType(value : String) : List {
-        def converter = Converters.getConverter(componentType)
-        return value?.split(/,\s+/)?.collect { converter.toType(it) }
+    override fun toString(value : List<E>) : String {
+        return value.map { it?.toString() ?: "" }.join(", ")
     }
 
-    String toString(List value) {
-        return value?.join(", ")
-    }
-
-    boolean validate(Object value) {
-        def converter = Converters.getConverter(componentType)
-        return value == null || (value instanceof List && value.every { converter.validate(it) })
+    override fun validate(value : Any?) : Boolean {
+        val converter = Converters.getConverter(componentType) ?: throw NoConverterFoundException(componentType)
+        return (value is List<*> && value.all { converter.validate(it) })
     }
 }
