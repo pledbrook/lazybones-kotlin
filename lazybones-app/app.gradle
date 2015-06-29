@@ -28,7 +28,7 @@ apply plugin: "codenarc"
 apply plugin: "net.gvmtool.sdkvendor"
 
 applicationName = "lazybones"
-mainClassName = "uk.co.cacoethes.lazybones.LazybonesMain"
+mainClassName = "uk.co.cacoethes.lazybones.LazybonesPackage"
 version = "0.8-SNAPSHOT"
 
 // These settings mimic the old client VM behavior. Should result in faster startup.
@@ -47,11 +47,11 @@ ext {
 sourceSets {
     integTest {
         groovy {
-            srcDir "src/integ/groovy"
+            srcDir "src/integTest/groovy"
             compileClasspath += sourceSets.main.output
         }
         resources {
-            srcDir "src/integ/resources"
+            srcDir "src/integTest/resources"
         }
     }
 }

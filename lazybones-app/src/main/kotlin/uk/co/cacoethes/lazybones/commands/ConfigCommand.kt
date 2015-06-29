@@ -3,9 +3,7 @@ package uk.co.cacoethes.lazybones.commands
 import groovy.util.logging.Log
 import joptsimple.OptionParser
 import joptsimple.OptionSet
-import uk.co.cacoethes.lazybones.config.Configuration
-import uk.co.cacoethes.lazybones.config.InvalidSettingException
-import uk.co.cacoethes.lazybones.config.UnknownSettingException
+import uk.co.cacoethes.lazybones.config.*
 import kotlin.IntRange as IRange
 
 /**
@@ -17,9 +15,8 @@ import kotlin.IntRange as IRange
  * Fortunately the `set` and `add` sub-commands warn the user when they try to
  * modify a setting that is overridden in this way.<p>
  */
-@Log
-class ConfigCommand  {
-    static final String USAGE = """\
+class ConfigCommand(val config : Configuration) : AbstractCommand() {
+    val USAGE = """\
 USAGE: config set <option> <value> [<value> ...]
        config add <option> <value>
        config clear <option>
@@ -38,84 +35,77 @@ USAGE: config set <option> <value> [<value> ...]
                   treated as an array.
 """
 
-    private static final String INDENT = "    "
-    private static final String ALL_OPT = "all"
-    private static final String INCORRECT_ARG_COUNT_MSG = "Incorrect number of arguments for config "
-    private static final String OVERRIDE_WARNING_MSG = "The user configuration file overrides this setting, so " +
+    private val INDENT = "    "
+    private val ALL_OPT = "all"
+    private val INCORRECT_ARG_COUNT_MSG = "Incorrect number of arguments for config "
+    private val OVERRIDE_WARNING_MSG = "The user configuration file overrides this setting, so " +
             "the new value won't take effect"
 
-    Configuration config
+    override fun getName() : String { return "config" }
 
-    ConfigCommand(Configuration config) { this.config = config }
-
-//    @Override
-    String getName() { return "config" }
-
-//    @Override
-    String getDescription() {
+    override fun getDescription() : String {
         return "Displays general help, or help for a specific command."
     }
 
-//    @Override
-    protected IRange getParameterRange() {
-        // There is unfortunately no way to set an argument limit on a sub-command
-        // basis, so we just use a suitable range for the 'config set' command. The
-        // doExecute() method performs a secondary check.
-        return new IRange(1, Integer.MAX_VALUE)
-    }
+    override val parameterRange = 1..Integer.MAX_VALUE
 
-//    @Override
-    protected OptionParser doAddToParser(OptionParser parser) {
+    override protected fun doAddToParser(parser : OptionParser) : OptionParser {
         parser.accepts(ALL_OPT, "Used with `show` to display all setting values.")
         return parser
     }
 
-//    @Override
-    protected String getUsage() { return USAGE }
+    override protected val usage = USAGE
 
-//    @Override
-    @SuppressWarnings("DuplicateNumberLiteral")
-    protected int doExecute(OptionSet cmdOptions, Map globalOptions, Configuration config) {
-        def cmdArgs = cmdOptions.nonOptionArguments()
-        switch (cmdArgs[0]) {
-        case "set":
-            if (cmdArgs.size() < 3) {
-                log.severe getHelp(INCORRECT_ARG_COUNT_MSG + cmdArgs[0])
+    override protected fun doExecute(
+            cmdOptions : OptionSet,
+            globalOptions : Map<*, *>,
+            config : Configuration) : Int {
+        val cmdArgs = cmdOptions.nonOptionArguments()
+        when (cmdArgs[0]) {
+            "set" -> {
+                if (cmdArgs.size() < 3) {
+                    log.severe(getHelp(INCORRECT_ARG_COUNT_MSG + cmdArgs[0]))
+                    return 1
+                }
+                return configSet(cmdOptions)
+            }
+
+            "add" -> {
+                if (cmdArgs.size() < 3 || cmdArgs.size() > 4) {
+                    log.severe(getHelp(INCORRECT_ARG_COUNT_MSG + cmdArgs[0]))
+                    return 1
+                }
+                return configAdd(cmdOptions)
+            }
+
+            "clear" -> {
+                if (cmdArgs.size() < 2 || cmdArgs.size() > 3) {
+                    log.severe(getHelp(INCORRECT_ARG_COUNT_MSG + cmdArgs[0]))
+                    return 1
+                }
+                return configClear(cmdOptions)
+            }
+
+            "show" -> {
+                if (cmdArgs.size() > 2 || (cmdArgs.size() == 1 && !cmdOptions.has(ALL_OPT))) {
+                    log.severe(getHelp(INCORRECT_ARG_COUNT_MSG + cmdArgs[0]))
+                    return 1
+                }
+                return if (cmdOptions.has(ALL_OPT)) configShowAll() else configShow(cmdOptions)
+            }
+
+            "list" -> {
+                if (cmdArgs.size() > 1) {
+                    log.severe(getHelp(INCORRECT_ARG_COUNT_MSG + cmdArgs[0]))
+                    return 1
+                }
+                return configList()
+            }
+
+            else -> {
+                log.severe(getHelp("Invalid config command: '${cmdArgs[0]}'"))
                 return 1
             }
-            return configSet(cmdOptions)
-
-        case "add":
-            if (cmdArgs.size() < 3 || cmdArgs.size() > 4) {
-                log.severe getHelp(INCORRECT_ARG_COUNT_MSG + cmdArgs[0])
-                return 1
-            }
-            return configAdd(cmdOptions)
-
-        case "clear":
-            if (cmdArgs.size() < 2 || cmdArgs.size() > 3) {
-                log.severe getHelp(INCORRECT_ARG_COUNT_MSG + cmdArgs[0])
-                return 1
-            }
-            return configClear(cmdOptions)
-
-        case "show":
-            if (cmdArgs.size() > 2 || (cmdArgs.size() == 1 && !cmdOptions.has(ALL_OPT))) {
-                log.severe getHelp(INCORRECT_ARG_COUNT_MSG + cmdArgs[0])
-                return 1
-            }
-            return cmdOptions.has(ALL_OPT) ? configShowAll() : configShow(cmdOptions)
-
-        case "list":
-            if (cmdArgs.size() > 1) {
-                log.severe getHelp(INCORRECT_ARG_COUNT_MSG + cmdArgs[0])
-                return 1
-            }
-            return configList()
-
-        default:
-            log.severe getHelp("Invalid config command: '${cmdArgs[0]}'")
-            return 1
         }
     }
 
@@ -132,23 +122,23 @@ USAGE: config set <option> <value> [<value> ...]
      * @return An exit code. 0 means the command successfully completed, while
      * any other value indicates failure.
      */
-    protected int configSet(OptionSet cmdOptions) {
-        def cmdArgs = cmdOptions.nonOptionArguments()
-        def config = Configuration.initConfiguration()
+    protected fun configSet(cmdOptions : OptionSet ) : Int {
+        val cmdArgs = cmdOptions.nonOptionArguments()
+        val config = initConfiguration()
 
         try {
-            if (!config.putSetting(cmdArgs[1], cmdArgs[2..-1].join(", "))) {
-                log.warning OVERRIDE_WARNING_MSG
+            if (!config.putSetting(cmdArgs[1], cmdArgs.slice(2..-1).join(", "))) {
+                log.warning(OVERRIDE_WARNING_MSG)
             }
             config.storeSettings()
             return 0
         }
-        catch (UnknownSettingException ex) {
-            log.severe "Unrecognized setting: '${ex.settingName}'"
+        catch (ex : UnknownSettingException) {
+            log.severe("Unrecognized setting: '${ex.getSettingName()}'")
             return 1
         }
-        catch (InvalidSettingException ex) {
-            log.severe ex.message
+        catch (ex : InvalidSettingException) {
+            log.severe(ex.getMessage())
             return 1
         }
     }
@@ -170,24 +160,23 @@ USAGE: config set <option> <value> [<value> ...]
      * @return An exit code. 0 means the command successfully completed, while
      * any other value indicates failure.
      */
-    @SuppressWarnings("DuplicateNumberLiteral")
-    protected int configAdd(OptionSet cmdOptions) {
-        def cmdArgs = cmdOptions.nonOptionArguments()
-        def config = Configuration.initConfiguration()
+    protected fun configAdd(cmdOptions : OptionSet) : Int {
+        val cmdArgs = cmdOptions.nonOptionArguments()
+        val config = initConfiguration()
 
         try {
             if (!config.appendToSetting(cmdArgs[1], cmdArgs[2])) {
-                log.warning OVERRIDE_WARNING_MSG
+                log.warning(OVERRIDE_WARNING_MSG)
             }
             config.storeSettings()
             return 0
         }
-        catch (UnknownSettingException ex) {
-            log.severe "Unrecognized setting: '${ex.settingName}'"
+        catch (ex : UnknownSettingException) {
+            log.severe("Unrecognized setting: '${ex.getSettingName()}'")
             return 1
         }
-        catch (InvalidSettingException ex) {
-            log.severe ex.message
+        catch (ex : InvalidSettingException) {
+            log.severe(ex.getMessage())
             return 1
         }
     }
@@ -202,17 +191,17 @@ USAGE: config set <option> <value> [<value> ...]
      * @return An exit code. 0 means the command successfully completed, while
      * any other value indicates failure.
      */
-    protected int configClear(OptionSet cmdOptions) {
-        def cmdArgs = cmdOptions.nonOptionArguments()
-        def config = Configuration.initConfiguration()
+    protected fun configClear(cmdOptions : OptionSet) : Int {
+        val cmdArgs = cmdOptions.nonOptionArguments()
+        val config = initConfiguration()
 
         try {
             config.clearSetting(cmdArgs[1])
             config.storeSettings()
             return 0
         }
-        catch (UnknownSettingException ex) {
-            log.severe "Unrecognized setting: '${ex.settingName}'"
+        catch (ex : UnknownSettingException) {
+            log.severe("Unrecognized setting: '${ex.getSettingName()}'")
             return 1
         }
     }
@@ -226,31 +215,28 @@ USAGE: config set <option> <value> [<value> ...]
      * @return An exit code. 0 means the command successfully completed, while
      * any other value indicates failure.
      */
-    int configShow(OptionSet cmdOptions) {
-        def cmdArgs = cmdOptions.nonOptionArguments()
-        def config = Configuration.initConfiguration()
+    fun configShow(cmdOptions : OptionSet) : Int {
+        val cmdArgs = cmdOptions.nonOptionArguments()
+        val config = initConfiguration()
 
         try {
-            println config.getSetting(cmdArgs[1])
+            println(config.getSetting(cmdArgs[1]))
             return 0
         }
-        catch (UnknownSettingException ex) {
-            log.severe "Unrecognized setting: '${ex.settingName}'"
+        catch (ex : UnknownSettingException) {
+            log.severe("Unrecognized setting: '${ex.getSettingName()}'")
             return 1
         }
     }
 
-    @SuppressWarnings("DuplicateNumberLiteral")
-    int configShowAll() {
-        def settings = Configuration.initConfiguration().allSettings
-        final columnWidth = settings.keySet().inject(0) {
-            int max, String key -> Math.max(key.size(), max)
-        } + 3
+    fun configShowAll() : Int {
+        val settings = initConfiguration().getAllSettings()
+        val columnWidth = settings.keySet().fold(0) { max, key -> Math.max(key.length(), max) } + 3
 
-        println "Current configuration settings:"
+        println("Current configuration settings:")
         println()
-        for (Map.Entry setting in settings) {
-            println INDENT + setting.key.padRight(columnWidth) + "= " + setting.value
+        for (setting in settings) {
+            println(INDENT + setting.key.padEnd(columnWidth) + "= " + setting.value)
         }
 
         return 0
@@ -264,17 +250,14 @@ USAGE: config set <option> <value> [<value> ...]
      * @return An exit code. 0 means the command successfully completed, while
      * any other value indicates failure.
      */
-    @SuppressWarnings("DuplicateNumberLiteral")
-    int configList() {
-        def validSettings = Configuration.VALID_OPTIONS
-        final columnWidth = validSettings.keySet().inject(0) {
-            int max, String key -> Math.max(key.size(), max)
-        } + 3
+    fun configList() : Int {
+        val validSettings = config.validOptions
+        val columnWidth = validSettings.keySet().fold(0) { max, key -> Math.max(key.length(), max) } + 3
 
-        println "Valid Lazybones configuration settings:"
+        println("Valid Lazybones configuration settings:")
         println()
-        for (Map.Entry setting in validSettings) {
-            println INDENT + setting.key.padRight(columnWidth) + setting.value.simpleName
+        for (setting in validSettings) {
+            println(INDENT + setting.key.padEnd(columnWidth) + setting.value.getSimpleName())
         }
 
         return 0

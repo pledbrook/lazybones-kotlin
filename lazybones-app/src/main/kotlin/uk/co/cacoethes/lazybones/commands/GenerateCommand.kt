@@ -48,8 +48,8 @@ USAGE: generate <template>
 
     override protected fun doExecute(
             cmdOptions: OptionSet,
-            globalOptions : Map<*, *>,
-            configuration : Configuration) : Int {
+            globalOptions: Map<*, *>,
+            config: Configuration) : Int {
         // Make sure this is a Lazybones-created project, otherwise there are
         // no subtemplates to use.
         if (!LAZYBONES_DIR.exists()) {

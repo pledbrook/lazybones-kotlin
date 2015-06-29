@@ -8,14 +8,20 @@ import java.net.URI
 object Converters {
     val CONVERTER_MAP : Map<Class<out Any>, Converter<out Any>> = mapOf(
             javaClass<Any>() to ObjectConverter(),
-            javaClass<Boolean>() to BooleanConverter(),
-            javaClass<Int>() to IntegerConverter(),
+            javaClass<java.lang.Boolean>() to BooleanConverter(),
+            javaClass<java.lang.Integer>() to IntegerConverter(),
             javaClass<String>() to StringConverter(),
-            javaClass<URI>() to UriConverter())
+            javaClass<URI>() to UrlConverter())
 
     fun getConverter<T>(theClass : Class<T> ) : Converter<out Any>? {
         if (theClass.isArray()) return ListConverter(theClass.getComponentType())
 
         return CONVERTER_MAP.get(theClass)
+    }
+
+    fun requireConverter<T>(theClass : Class<T> ) : Converter<out Any> {
+        if (theClass.isArray()) return ListConverter(theClass.getComponentType())
+
+        return CONVERTER_MAP.get(theClass) ?: throw NoConverterFoundException(theClass)
     }
 }

@@ -50,7 +50,7 @@ USAGE: create <template> <version>? <dir>
 
     constructor(config : Configuration) : this(
             File(config.getSetting("cache.dir") as String),
-            config.getSetting("templates.mappings") as Map<String, String>)
+            config.getSubSettings("templates.mappings").mapValues { entry -> entry.value.toString() })
 
     override fun getName() : String { return "create" }
 
@@ -70,13 +70,13 @@ USAGE: create <template> <version>? <dir>
     override protected val usage = USAGE
 
     override protected fun doExecute(
-            cmdOptions : OptionSet,
-            globalOptions : Map<*, *>,
-            configuration : Configuration) : Int {
+            cmdOptions: OptionSet,
+            globalOptions: Map<*, *>,
+            config: Configuration) : Int {
         try {
             val createData = evaluateArgs(cmdOptions)
 
-            val packageSources = packageSourceFactory.buildPackageSourceList(configuration)
+            val packageSources = packageSourceFactory.buildPackageSourceList(config)
             val packageLocation = packageLocationFactory.buildPackageLocation(
                     createData.packageArg.templateName,
                     createData.requestedVersion,
@@ -90,7 +90,7 @@ USAGE: create <template> <version>? <dir>
             targetDir.mkdirs()
             unzip(pkg, targetDir)
 
-            val scmAdapter = if (cmdOptions.has(GIT_OPT)) GitAdapter(configuration) else null
+            val scmAdapter = if (cmdOptions.has(GIT_OPT)) GitAdapter(config) else null
 
             val executor = InstallationScriptExecuter(scmAdapter)
             executor.runPostInstallScriptWithArgs(

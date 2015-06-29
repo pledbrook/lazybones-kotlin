@@ -15,14 +15,15 @@ import java.lang.reflect.Method
 import java.util.logging.Level
 import java.util.logging.Logger
 
+val DEFAULT_ENCODING = "utf-8"
+
 /**
  * Base script that will be applied to the lazybones.groovy root script in a lazybones template
  *
  * @author Tommy Barker
  */
-class LazybonesScript : Script() {
+open class LazybonesScript : Script() {
     val log = Logger.getLogger(this.javaClass.getName())
-    val DEFAULT_ENCODING = "utf-8"
 
     /**
      * The target project directory. For project templates, this will be the
@@ -104,7 +105,7 @@ class LazybonesScript : Script() {
      * null}, or an empty string if the given string is empty.
      * @since 0.5
      */
-    fun transformText(args : Map<String, Any?>, name : String) : String {
+    fun transformText(args : Map<String, Any?>, name : String) : String? {
         if (!(args["from"] is NameType)) {
             throw IllegalArgumentException("Invalid or no value for 'from' named argument: ${args["from"]}")
         }
@@ -164,7 +165,7 @@ class LazybonesScript : Script() {
      * @return the response
      * @since 0.4
      */
-    fun ask(message : String, defaultValue : String? = null) : String? {
+    jvmOverloads fun ask(message : String, defaultValue : String? = null) : String? {
         print(message)
         return reader.readLine() ?: defaultValue
     }
@@ -258,9 +259,7 @@ class LazybonesScript : Script() {
     private fun findFilesByPattern(pattern : String) : List<File> {
         val filePatternWithUserDir = File(templateDir!!.getCanonicalFile(), pattern).path
 
-        return templateDir!!.walkTopDown().filter {
-            antPathMatcher.match(filePatternWithUserDir, it.canonicalPath)
-        }.asSequence().toList()
+        return templateDir!!.walkTopDown().asSequence().filter { it.isFile() }.toList()
     }
 
     /**
@@ -347,13 +346,6 @@ class LazybonesScript : Script() {
                 "Use `projectDir` instead.")
         return projectDir!!.path
     }
-
-    /**
-     * Read-only access to the path matcher. This method seems to be required
-     * for {@link #processTemplates(java.lang.String, java.util.Map)} to work
-     * properly.
-     */
-//    protected AntPathMatcher getAntPathMatcher() { return this.antPathMatcher }
 
     /**
      * Creates a new template instance from a file.

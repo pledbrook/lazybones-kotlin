@@ -1,11 +1,15 @@
 package uk.co.cacoethes.lazybones.commands
 
+import org.junit.Rule
+import org.junit.rules.TemporaryFolder
 import spock.lang.Specification
 
 /**
  * Created by tbarker on 12/18/13.
  */
 class ListCommandSpec extends Specification {
+    @Rule
+    public TemporaryFolder tmpDir = new TemporaryFolder()
 
     void "mappings are printed IF mappings exist"() {
         given:
@@ -17,15 +21,16 @@ class ListCommandSpec extends Specification {
                 customRatpack: "http://dl.dropboxusercontent.com/u/29802534/custom-ratpack.zip",
                 doesNotExist: "file:///does/not/exist"
         ]
+        def listCmd = new ListCommand(tmpDir.root)
 
         when:
-        ListCommand.handleMappings(empty)
+        listCmd.handleMappings(empty)
 
         then:
         0 == stream.size()
 
         when:
-        ListCommand.handleMappings(mappings)
+        listCmd.handleMappings(mappings)
 
         then:
         def output = stream.toString()

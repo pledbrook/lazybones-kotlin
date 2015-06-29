@@ -107,7 +107,7 @@ class InstallationScriptExecuter(val scmAdapter : ScmAdapter?) {
             // Need to use the getter method explicitly, otherwise it seems to
             // return an empty map.
             script.parentParams.mapValues { v ->
-                v?.toString()
+                v.toString()
             }.toProperties().store(w, "Lazybones saved template parameters")
         }
     }

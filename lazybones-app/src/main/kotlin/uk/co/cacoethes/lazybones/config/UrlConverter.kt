@@ -1,5 +1,7 @@
 package uk.co.cacoethes.lazybones.config
 
+import java.net.URI
+import java.net.URISyntaxException
 import java.net.URL
 
 /**
@@ -7,7 +9,7 @@ import java.net.URL
  * type as you would expect. It treats URI as an object, and so stringifies
  * the individual properties.
  */
-class UriConverter : Converter<URL> {
+class UrlConverter : Converter<URL> {
     override fun toType(value : String) : URL {
         return URL(value)
     }
@@ -17,6 +19,11 @@ class UriConverter : Converter<URL> {
     }
 
     override fun validate(value : Any?) : Boolean {
-        return value is URL
+        try {
+            return value == null || value is URL || URI(value.toString()).isAbsolute()
+        }
+        catch (ex : URISyntaxException) {
+            return false
+        }
     }
 }

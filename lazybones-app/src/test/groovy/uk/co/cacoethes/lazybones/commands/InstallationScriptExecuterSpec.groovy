@@ -11,7 +11,7 @@ import uk.co.cacoethes.lazybones.LazybonesScript
 class InstallationScriptExecuterSpec extends Specification {
 
     @Rule
-    public TemporaryFolder testFolder = new TemporaryFolder();
+    public TemporaryFolder testFolder = new TemporaryFolder()
 
     void "lazybones gets deleted after running"() {
         given: "a create command instance"

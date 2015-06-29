@@ -16,7 +16,6 @@ class UrlUtilsSpec extends Specification {
         a     | b
         true  | "http://foo.com"
         false | "foo.com"
-        false | null
         false | ""
     }
 }

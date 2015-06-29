@@ -3,12 +3,14 @@ package uk.co.cacoethes.lazybones.config
 import groovy.json.JsonBuilder
 import groovy.json.JsonSlurper
 import groovy.util.ConfigObject
+import groovy.util.ConfigSlurper
 import groovy.util.logging.Log
-import java.io.File
+import java.io.*
 import java.net.URI
 import java.util.*
 
 import java.util.logging.Level
+import java.util.logging.Logger
 
 /**
  * <p>Central configuration for Lazybones, although only the static data and methods
@@ -28,98 +30,34 @@ import java.util.logging.Level
  */
 class Configuration(
         baseSettings : ConfigObject,
-        managedSettings : Map,
-        val overrideSettings : Map,
-        val validOptions : Map,
+        val overrideSettings : Map<String, Any>,
+        managedSettings : Map<String, Any>,
+        val validOptions : Map<String, Class<*>>,
         val jsonConfigFile : File) {
-
-    val SYSPROP_OVERRIDE_PREFIX = "lazybones."
-    val ENCODING = "UTF-8"
-    val JSON_CONFIG_FILENAME = "managed-config.json"
-
-    val VALID_OPTIONS : Map<String, Class<*>>
-    val CONFIG_FILE_SYSPROP = "lazybones.config.file"
-    val NAME_SEPARATOR = "."
-    val NAME_SEPARATOR_REGEX = "\\."
 
     private val settings : ConfigObject
     private val managedSettings : ConfigObject
 
     init {
-        val options : MutableMap<String, Class<*>> = hashMapOf(
-                "config.file" to javaClass<String>(),
-                "cache.dir" to javaClass<String>(),
-                "git.name" to javaClass<String>(),
-                "git.email" to javaClass<String>(),
-                "options.logLevel" to javaClass<String>(),
-                "options.verbose" to javaClass<Boolean>(),
-                "options.quiet" to javaClass<Boolean>(),
-                "options.info" to javaClass<Boolean>(),
-                "bintrayRepositories" to javaClass<Array<String>>(),
-                "templates.mappings.*" to javaClass<URI>(),
-                "systemProp.*" to javaClass<Any>())
-
-        // These settings should only be active for the functional tests, not when the
-        // application is being used normally.
-        if (System.getProperty(CONFIG_FILE_SYSPROP)?.endsWith("test-config.groovy") ?: false) {
-            options.putAll(hashMapOf(
-                    "test.my.option" to javaClass<Int>(),
-                    "test.option.override" to javaClass<String>(),
-                    "test.option.array" to javaClass<Array<String>>(),
-                    "test.integer.array" to javaClass<Array<Int>>(),
-                    "test.other.array" to javaClass<Array<String>>(),
-                    "test.adding.array" to javaClass<Array<String>>()))
-        }
-
-        VALID_OPTIONS = Collections.unmodifiableMap(options)
-
-
         this.settings = baseSettings
         addConfigEntries(managedSettings, this.settings)
         addConfigEntries(overrideSettings, this.settings)
 
-        this.managedSettings = new ConfigObject()
-        addConfigEntries managedSettings, this.managedSettings
+        this.managedSettings = ConfigObject()
+        addConfigEntries(managedSettings, this.managedSettings)
 
         processSystemProperties(this.settings)
 
         // Validate the provided settings to ensure that they are known and that
         // they have a value of the appropriate type.
-        def invalidOptions = this.settings.flatten().findAll { key, value ->
-            !validateSetting(key, validOptions, value)
+        val invalidOptions = (this.settings.flatten() as Map<String, Any>).filter { entry ->
+            !validateSetting(entry.key, validOptions, entry.value)
         }.keySet()
 
-        if (invalidOptions) {
-            throw new MultipleInvalidSettingsException(invalidOptions as List)
+        if (invalidOptions.isNotEmpty()) {
+            throw MultipleInvalidSettingsException(invalidOptions.toList())
         }
     }
-    protected Configuration {
-        this.validOptions = validOptions
-        this.overrideSettings = overrideSettings
-        this.jsonConfigFile = jsonConfigFile
-
-        this.settings = baseSettings
-        addConfigEntries managedSettings, this.settings
-        addConfigEntries overrideSettings, this.settings
-
-        this.managedSettings = new ConfigObject()
-        addConfigEntries managedSettings, this.managedSettings
-
-        processSystemProperties(this.settings)
-
-        // Validate the provided settings to ensure that they are known and that
-        // they have a value of the appropriate type.
-        def invalidOptions = this.settings.flatten().findAll { key, value ->
-            !validateSetting(key, validOptions, value)
-        }.keySet()
-
-        if (invalidOptions) {
-            throw new MultipleInvalidSettingsException(invalidOptions as List)
-        }
-    }
-
-    /** Returns the location of the managed config file (stored as JSON). */
-    File getJsonConfigFile() { return jsonConfigFile }
 
     /**
      * Persists the managed config settings as JSON to the file located by
@@ -128,9 +66,9 @@ class Configuration(
      * overridden by values in the user config and system properties
      * (represented by a map of override settings).
      */
-    List storeSettings() {
-        def sharedKeys = findIntersectKeys(managedSettings, overrideSettings)
-        jsonConfigFile.setText(new JsonBuilder(managedSettings).toPrettyString(), ENCODING)
+    public fun storeSettings() : List<String> {
+        val sharedKeys = findIntersectKeys(managedSettings as Map<String, Any>, overrideSettings)
+        jsonConfigFile.writeText(JsonBuilder(managedSettings).toPrettyString(), ENCODING)
 
         return sharedKeys
     }
@@ -142,9 +80,9 @@ class Configuration(
      * @throws UnknownSettingException If the setting name is not recognised,
      * i.e. it isn't in the registered list of known settings.
      */
-    def getSetting(String name) {
+    public fun getSetting(name : String) : Any? {
         requireSettingType(name)
-        return getConfigOption(this.settings, name)
+        return getConfigOption(this.settings as Map<String, Any>, name)
     }
 
     /**
@@ -162,18 +100,19 @@ class Configuration(
      * @throws InvalidSettingException If the setting name is not partial but
      * is a complete match for an entry in the known settings map.
      */
-    Map getSubSettings(String rootSettingName) {
+    public fun getSubSettings(rootSettingName : String) : Map<String, Any> {
         if (validOptions.containsKey(rootSettingName)) {
-            throw new InvalidSettingException(rootSettingName, null, "'$rootSettingName' has no sub-settings")
+            throw InvalidSettingException(rootSettingName, null, "'$rootSettingName' has no sub-settings")
         }
 
-        final foundMatching = validOptions.any { pattern, valueType ->
-            pattern.startsWith(rootSettingName + NAME_SEPARATOR) ||
-                rootSettingName ==~ settingNameAsRegex(pattern)
+        val foundMatching = validOptions.any { entry ->
+            entry.key.startsWith(rootSettingName + NAME_SEPARATOR) ||
+                settingNameAsRegex(entry.key).toRegex().matches(rootSettingName)
         }
-        if (!foundMatching) throw new UnknownSettingException(rootSettingName)
+        if (!foundMatching) throw UnknownSettingException(rootSettingName)
 
-        return getConfigOption(this.settings, rootSettingName) as Map ?: [:]
+        val setting = getConfigOption(this.settings as Map<String, Any>, rootSettingName)
+        return (setting ?: hashMapOf<String, Any>()) as Map<String, Any>
     }
 
     /**
@@ -182,8 +121,8 @@ class Configuration(
      * It's similar to converting the hierarchical ConfigObject into a Properties
      * object.
      */
-    Map getAllSettings() {
-        return settings.flatten()
+    public fun getAllSettings() : Map<String, Any> {
+        return settings.flatten() as Map<String, Any>
     }
 
     /**
@@ -203,18 +142,18 @@ class Configuration(
      * type for this setting, or if it cannot be converted to the correct type from
      * a string.
      */
-    boolean putSetting(String name, value) {
-        def settingType = requireSettingType(name)
+    public fun putSetting(name : String, value : Any) : Boolean {
+        val settingType = requireSettingType(name)
 
-        def convertedValue
+        val convertedValue : Any
         try {
-            convertedValue = value instanceof CharSequence ?
-                    Converters.getConverter(settingType).toType(value) :
-                    requireValueOfType(name, value, settingType)
+            convertedValue =
+                    if (value is CharSequence) Converters.requireConverter(settingType).toType(value.toString())
+                    else requireValueOfType(name, value, settingType)
         }
-        catch (all) {
-            log.log Level.FINEST, all.message, all
-            throw new InvalidSettingException(name, value)
+        catch (all : Throwable) {
+            log.log(Level.FINEST, all.getMessage(), all)
+            throw InvalidSettingException(name, value)
         }
 
         setConfigOption(settings, name, convertedValue)
@@ -237,20 +176,23 @@ class Configuration(
      * type for this setting, or if it cannot be converted to the correct type from
      * a string.
      */
-    boolean appendToSetting(String name, value) {
-        def settingType = requireSettingType(name)
+    public fun appendToSetting(name : String, value : Any) : Boolean {
+        val settingType = requireSettingType(name)
         if (!settingType.isArray()) {
-            throw new InvalidSettingException(
+            throw InvalidSettingException(
                     name, value,
                     "Setting '${name}' is not an array type, so you cannot add to it")
         }
 
-        def convertedValue = value instanceof CharSequence ?
-                Converters.getConverter(settingType.componentType).toType(value) :
-                requireValueOfType(name, value, settingType.componentType)
+        val convertedValue = if (value is CharSequence) {
+            Converters.requireConverter(settingType.getComponentType())?.toType(value.toString())
+        }
+        else {
+            requireValueOfType(name, value, settingType.getComponentType())
+        }
 
-        getConfigOptionAsList(settings, name) << convertedValue
-        getConfigOptionAsList(managedSettings, name) << convertedValue
+        getConfigOptionAsList(settings, name).add(convertedValue)
+        getConfigOptionAsList(managedSettings, name).add(convertedValue)
         return getConfigOption(overrideSettings, name) == null
     }
 
@@ -260,7 +202,7 @@ class Configuration(
      * @throws UnknownSettingException If the setting name doesn't match any of
      * those in the known settings map.
      */
-    void clearSetting(String name) {
+    public fun clearSetting(name : String) {
         requireSettingType(name)
 
         clearConfigOption(settings, name)
@@ -273,254 +215,297 @@ class Configuration(
      * becomes an "http.proxyHost" system property in the current JVM.
      * @param config The configuration to load system properties from.
      */
-    protected void processSystemProperties(ConfigObject config) {
-        config.systemProp.flatten().each { name, value ->
-            System.setProperty(name, value?.toString())
+    fun processSystemProperties(config : ConfigObject) {
+        (config.getProperty("systemProp") as ConfigObject).flatten().forEach { entry ->
+            System.setProperty(entry.key as String, entry.value?.toString())
         }
     }
 
-    protected Class requireSettingType(String name) {
-        def settingType = getSettingType(name, validOptions)
-        if (!settingType) {
-            throw new UnknownSettingException(name)
+    fun requireSettingType(name : String) : Class<*> {
+        val settingType = getSettingType(name, validOptions)
+        if (settingType == null) {
+            throw UnknownSettingException(name)
         }
         return settingType
     }
 
-    protected requireValueOfType(String name, value, Class settingType) {
+    fun requireValueOfType(name : String, value : Any, settingType : Class<*>) : Any {
         if (valueOfType(value, settingType)) {
             return value
         }
         else {
-            throw new InvalidSettingException(name, value)
+            throw InvalidSettingException(name, value)
         }
     }
 
-    protected boolean valueOfType(value, Class settingType) {
-        if (settingType.isArray() && value instanceof List) {
-            return value.every { settingType.componentType.isAssignableFrom(it.getClass()) }
+    fun valueOfType(value : Any, settingType : Class <*>) : Boolean {
+        if (settingType.isArray() && value is List<*>) {
+            return value.all { settingType.getComponentType().isAssignableFrom(it!!.javaClass) }
         }
         else {
-            return settingType.isAssignableFrom(value.getClass())
+            return settingType.isAssignableFrom(value.javaClass)
+        }
+    }
+}
+
+val SYSPROP_OVERRIDE_PREFIX = "lazybones."
+val ENCODING = "UTF-8"
+val JSON_CONFIG_FILENAME = "managed-config.json"
+val NAME_SEPARATOR = "."
+val NAME_SEPARATOR_REGEX = "\\."
+val CONFIG_FILE_SYSPROP = "lazybones.config.file"
+
+val VALID_OPTIONS = hashMapOf(
+        "config.file" to javaClass<String>(),
+        "cache.dir" to javaClass<String>(),
+        "git.name" to javaClass<String>(),
+        "git.email" to javaClass<String>(),
+        "options.logLevel" to javaClass<String>(),
+        "options.verbose" to javaClass<Boolean>(),
+        "options.quiet" to javaClass<Boolean>(),
+        "options.info" to javaClass<Boolean>(),
+        "bintrayRepositories" to javaClass<Array<String>>(),
+        "templates.mappings.*" to javaClass<URI>(),
+        "systemProp.*" to javaClass<Any>()) +
+        if (System.getProperty(CONFIG_FILE_SYSPROP)?.endsWith("test-config.groovy") ?: false) {
+            hashMapOf(
+                    "test.my.option" to javaClass<Int>(),
+                    "test.option.override" to javaClass<String>(),
+                    "test.option.array" to javaClass<Array<String>>(),
+                    "test.integer.array" to javaClass<Array<Int>>(),
+                    "test.other.array" to javaClass<Array<String>>(),
+                    "test.adding.array" to javaClass<Array<String>>())
+        }
+        else hashMapOf()
+
+val log = Logger.getLogger(javaClass<Configuration>().getName())
+
+/**
+ * <ol>
+ *   <li>Loads the default configuration file from the classpath</li>
+ *   <li>Works out the location of the user config file (either the default
+ * or from a system property)</li>
+ *   <li>Loads the user config file and merges with the default</li>
+ *   <li>Overrides any config options with values provided as system properties</li>
+ * </ol>
+ * <p>The system properties take the form of 'lazybones.&lt;config.option&gt;'.</p>
+ */
+public fun initConfiguration() : Configuration {
+    val defaultConfig = loadDefaultConfig()
+    val userConfigFile = File(System.getProperty(CONFIG_FILE_SYSPROP) ?:
+            defaultConfig.flatten()["config.file"] as String)
+    val jsonConfigFile = getJsonConfigFile(userConfigFile)
+
+    return initConfiguration(
+            defaultConfig,
+            if (userConfigFile.exists()) BufferedReader(InputStreamReader(userConfigFile.inputStream(), ENCODING))
+            else StringReader(""),
+            jsonConfigFile)
+}
+
+public fun initConfiguration(baseConfig : ConfigObject, userConfigSource : Reader, jsonConfigFile : File) : Configuration {
+    val jsonConfig = HashMap<String, Any>()
+    if (jsonConfigFile?.exists()) {
+        jsonConfig.putAll(loadJsonConfig(BufferedReader(InputStreamReader(jsonConfigFile.inputStream(), ENCODING))))
+    }
+
+    val overrideConfig = loadConfig(userConfigSource)
+
+    // Load settings from system properties. These override all other sources.
+    loadConfigFromSystemProperties(overrideConfig)
+
+    return Configuration(baseConfig, overrideConfig as Map<String, Any>, jsonConfig, VALID_OPTIONS, jsonConfigFile)
+}
+
+/**
+ * Parses Groovy ConfigSlurper content and returns the corresponding
+ * configuration as a ConfigObject.
+ */
+fun loadConfig(r : Reader) : ConfigObject {
+    return ConfigSlurper().parse(r.readText())
+}
+
+fun loadJsonConfig(r : Reader) : Map<String, Any?> {
+    return JsonSlurper().parse(r) as Map<String, Any?>
+}
+
+fun loadDefaultConfig() : ConfigObject {
+    return ConfigSlurper().parse(javaClass<Configuration>().getResource("defaultConfig.groovy").readText(ENCODING))
+}
+
+fun getJsonConfigFile(userConfigFile : File) : File {
+    return File(userConfigFile.getParentFile(), JSON_CONFIG_FILENAME)
+}
+
+fun getSettingType(name : String, knownSettings : Map<String, Any>) : Class<*>? {
+    val type = knownSettings[name] ?: knownSettings[makeWildcard(name)]
+    return if (type != null) type as Class<*> else null
+}
+
+fun makeWildcard(dottedString : String) : String {
+    if (dottedString.indexOf(NAME_SEPARATOR) == -1) return dottedString
+    else return dottedString.split(NAME_SEPARATOR_REGEX.toRegex()).allButLast().join(NAME_SEPARATOR) + ".*"
+}
+
+fun matchingSetting(name : String, knownSettings : Map<String, Any>) : Map.Entry<String, Any>? {
+    return knownSettings.asSequence().firstOrNull { entry ->
+        entry.key == name || settingNameAsRegex(entry.key).toRegex().hasMatch(name)
+    }
+}
+
+fun settingNameAsRegex(name : String) : String {
+    return name.replace(NAME_SEPARATOR, NAME_SEPARATOR_REGEX).replace("*", "[\\w]+")
+}
+
+/**
+ * Checks whether
+ * @param name
+ * @param knownSettings
+ * @param value
+ * @return
+ */
+fun validateSetting(name : String, knownSettings : Map<String, Any>, value : Any) : Boolean {
+    val setting = matchingSetting(name, knownSettings)
+    if (setting == null) throw UnknownSettingException(name)
+
+    val converter = Converters.requireConverter(setting.value as Class<*>)
+    return value == null || converter.validate(value)
+}
+
+/**
+ * <p>Takes a dot-separated string, such as "test.report.dir", and gets the corresponding
+ * config object property, {@code root.test.report.dir}.</p>
+ * @param root The config object to retrieve the value from.
+ * @param dottedString The dot-separated string representing a configuration option.
+ * @return The required configuration value, or {@code null} if the setting doesn't exist.
+ */
+private fun getConfigOption(root : Map<String, Any>, dottedString : String) : Any? {
+    val parts = dottedString.split(NAME_SEPARATOR_REGEX.toRegex())
+    if (parts.size() == 1) return root.get(parts[0])
+
+    val firstParts = parts.allButLast()
+    val configEntry = firstParts.fold(root as Map<String, Any?>?) { config, keyPart ->
+        val value = config?.get(keyPart)
+        if (value != null) value as Map<String, Any?> else null
+    }
+
+    return configEntry?.get(parts.last())
+}
+
+private fun getConfigOptionAsList(root : ConfigObject, dottedString : String) : MutableList<Any> {
+    val initialValue = getConfigOption(root as Map<String, Any>, dottedString)
+    val newValue = if (initialValue is Collection<*>)
+        ArrayList<Any>(initialValue)
+    else if (initialValue != null)
+        arrayListOf(initialValue)
+    else ArrayList<Any>()
+
+    setConfigOption(root, dottedString, newValue)
+    return newValue
+}
+
+/**
+ * <p>Takes a dot-separated string, such as "test.report.dir", and sets the corresponding
+ * config object property, {@code root.test.report.dir}, to the given value.</p>
+ * <p><em>Note</em> the {@code @CompileDynamic} annotation is currently required due to
+ * issue <a href="https://jira.codehaus.org/browse/GROOVY-6480">GROOVY-6480</a>.</p>
+ * @param root The config object to set the value on.
+ * @param dottedString The dot-separated string representing a configuration option.
+ * @param value The new value for this option.
+ * @return The map containing the final part of the dot-separated string as a
+ * key. In other words, {@code retval.dir == value} for the dotted string example above.
+ */
+private fun setConfigOption(root : ConfigObject, dottedString : String, value : Any) : Map<String, Any> {
+    val parts = dottedString.split(NAME_SEPARATOR_REGEX.toRegex())
+    val firstParts = parts.subList(0, parts.size() - 1)
+    val configEntry = firstParts.fold(root) { config, keyPart ->
+        config.getProperty(keyPart) as ConfigObject
+    }
+
+    configEntry.setProperty(parts.last(), value)
+    return configEntry as Map<String, Any>
+}
+
+private fun clearConfigOption(root : ConfigObject, dottedString : String) {
+    val parts = dottedString.split(NAME_SEPARATOR_REGEX.toRegex())
+    val configParts = parts.subList(0, parts.size() - 1)
+            .fold(arrayListOf(root) as MutableList<ConfigObject>) { list, namePart ->
+        list.add(list.last().getProperty(namePart) as ConfigObject)
+        list
+    }
+
+    configParts.last().remove(parts.last())
+    if (parts.size() == 1) return
+
+    for (i in parts.size()-2..0) {
+        if (configParts[i].getProperty(parts[i]) != null) break
+        configParts[i].remove(parts[i])
+    }
+}
+
+private fun loadConfigFromSystemProperties(overrideConfig : ConfigObject) : Map<String, String> {
+    val props = (System.getProperties() as Map<String, String>).filter {
+        it.key.startsWith(SYSPROP_OVERRIDE_PREFIX)
+    }
+
+    props.forEach { entry ->
+        val settingName = entry.key.substringAfter(SYSPROP_OVERRIDE_PREFIX)
+
+        if (!validateSetting(settingName, VALID_OPTIONS, entry.value)) {
+            log.warning("Unknown option '$settingName' or its values are invalid: ${entry.value}")
+        }
+
+        setConfigOption(overrideConfig, settingName, entry.value)
+    }
+
+    return props
+}
+
+/**
+ * Adds the data from a map to a given Groovy configuration object. This
+ * works recursively, so any values in the source map that are maps themselves
+ * are treated as a set of sub-keys in the configuration.
+ */
+private fun addConfigEntries(data : Map<String, Any>, obj : ConfigObject) {
+    data.forEach { entry ->
+        if (entry.value is Map<*, *>) {
+            addConfigEntries(entry.value as Map<String, Any>, obj.getProperty(entry.key) as ConfigObject)
+        }
+        else obj.setProperty(entry.key, entry.value)
+    }
+}
+
+/**
+ * <p>Takes two maps and works out which keys are shared between two maps.
+ * Crucially, this method recurses such that it checks the keys of any
+ * nested maps as well. For example, if two maps have the same keys and
+ * sub-keys such as [one: [two: "test"]], then the key "one.two" is
+ * considered to be a shared key. Note how the keys of sub-maps are
+ * referenced using dot ('.') notation.</p>
+ * @param map1 The first map.
+ * @param map2 The map to compare against the first map.
+ * @return A list of the keys that both maps share. If either map is empty
+ * or the two share no keys at all, this method returns an empty list.
+ * Sub-keys are referenced using dot notation ("my.option.override") in the
+ * same way that <tt>ConfigObject</tt> keys are converted when the settings
+ * are flattened.
+ */
+private fun findIntersectKeys(map1 : Map<String, Any>, map2 : Map<String, Any>) : List<String> {
+    val keys = map1.keySet().intersect(map2.keySet())
+    val result : MutableList<String> = keys.toArrayList()
+
+    for (k in keys) {
+        if (map1[k] is Map<*, *> && map2[k] is Map<*, *>) {
+            result.remove(k)
+            result.addAll(findIntersectKeys(
+                    map1[k] as Map<String, Any>,
+                    map2[k] as Map<String, Any>).map { k + NAME_SEPARATOR + it })
         }
     }
 
-    /**
-     * <ol>
-     *   <li>Loads the default configuration file from the classpath</li>
-     *   <li>Works out the location of the user config file (either the default
-     * or from a system property)</li>
-     *   <li>Loads the user config file and merges with the default</li>
-     *   <li>Overrides any config options with values provided as system properties</li>
-     * </ol>
-     * <p>The system properties take the form of 'lazybones.&lt;config.option&gt;'.</p>
-     */
-    static Configuration initConfiguration() {
-        def defaultConfig = loadDefaultConfig()
-        def userConfigFile = (System.getProperty(CONFIG_FILE_SYSPROP) ?: defaultConfig.config.file) as File
-        def jsonConfigFile = getJsonConfigFile(userConfigFile)
+    return result
+}
 
-        return initConfiguration(
-                defaultConfig,
-                userConfigFile.exists() ? userConfigFile.newReader(ENCODING) : new StringReader(""),
-                jsonConfigFile)
-    }
-
-    static Configuration initConfiguration(ConfigObject baseConfig, Reader userConfigSource, File jsonConfigFile) {
-        def jsonConfig = [:]
-        if (jsonConfigFile?.exists()) {
-            jsonConfig = loadJsonConfig(jsonConfigFile.newReader(ENCODING))
-        }
-
-        def overrideConfig = loadConfig(userConfigSource)
-
-        // Load settings from system properties. These override all other sources.
-        loadConfigFromSystemProperties(overrideConfig)
-
-        return new Configuration(baseConfig, overrideConfig, jsonConfig, VALID_OPTIONS, jsonConfigFile)
-    }
-
-    static Class getSettingType(String name, Map knownSettings) {
-        def valueType = knownSettings[name] ?: knownSettings[makeWildcard(name)]
-        return valueType
-    }
-
-    @SuppressWarnings("DuplicateNumberLiteral")
-    static String makeWildcard(String dottedString) {
-        if (dottedString.indexOf(NAME_SEPARATOR) == -1) return dottedString
-        else return dottedString.split(NAME_SEPARATOR_REGEX)[0..-2].join(NAME_SEPARATOR) + ".*"
-    }
-
-    static Map.Entry matchingSetting(String name, Map knownSettings) {
-        return knownSettings.find { String key, value ->
-            key == name || name =~ settingNameAsRegex(key)
-        }
-    }
-
-    protected static String settingNameAsRegex(String name) {
-        return name.replace(NAME_SEPARATOR, NAME_SEPARATOR_REGEX).replace("*", "[\\w]+")
-    }
-
-    /**
-     * Checks whether
-     * @param name
-     * @param knownSettings
-     * @param value
-     * @return
-     */
-    static boolean validateSetting(String name, Map knownSettings, value) {
-        def setting = matchingSetting(name, knownSettings)
-        if (!setting) throw new UnknownSettingException(name)
-
-        def converter = Converters.getConverter(setting.value)
-        return value == null || converter.validate(value)
-    }
-
-    /**
-     * Parses Groovy ConfigSlurper content and returns the corresponding
-     * configuration as a ConfigObject.
-     */
-    static ConfigObject loadConfig(Reader r) {
-        return new ConfigSlurper().parse(r.text)
-    }
-
-    static Map loadJsonConfig(Reader r) {
-        return new JsonSlurper().parse(r) as Map
-    }
-
-    /**
-     * <p>Takes a dot-separated string, such as "test.report.dir", and gets the corresponding
-     * config object property, {@code root.test.report.dir}.</p>
-     * @param root The config object to retrieve the value from.
-     * @param dottedString The dot-separated string representing a configuration option.
-     * @return The required configuration value, or {@code null} if the setting doesn't exist.
-     */
-    @SuppressWarnings("DuplicateNumberLiteral")
-    protected static getConfigOption(Map root, String dottedString) {
-        def parts = dottedString.split(NAME_SEPARATOR_REGEX)
-        def firstParts = parts[0..<(parts.size() - 1)]
-        def configEntry = firstParts.inject(root) { Map config, String keyPart ->
-            config?.get(keyPart)
-        }
-
-        return configEntry?.get(parts[-1])
-    }
-
-    protected static getConfigOptionAsList(ConfigObject root, String dottedString) {
-        def currentValue = getConfigOption(root, dottedString)
-        currentValue = currentValue != null ? new ArrayList(currentValue) : []
-
-        setConfigOption(root, dottedString, currentValue)
-        return currentValue
-    }
-
-    /**
-     * <p>Takes a dot-separated string, such as "test.report.dir", and sets the corresponding
-     * config object property, {@code root.test.report.dir}, to the given value.</p>
-     * <p><em>Note</em> the {@code @CompileDynamic} annotation is currently required due to
-     * issue <a href="https://jira.codehaus.org/browse/GROOVY-6480">GROOVY-6480</a>.</p>
-     * @param root The config object to set the value on.
-     * @param dottedString The dot-separated string representing a configuration option.
-     * @param value The new value for this option.
-     * @return The map containing the final part of the dot-separated string as a
-     * key. In other words, {@code retval.dir == value} for the dotted string example above.
-     */
-    @SuppressWarnings("DuplicateNumberLiteral")
-    protected static Map setConfigOption(ConfigObject root, String dottedString, value) {
-        def parts = dottedString.split(NAME_SEPARATOR_REGEX)
-        def firstParts = parts[0..<(parts.size() - 1)]
-        def configEntry = firstParts.inject(root) { ConfigObject config, String keyPart ->
-            config.getProperty(keyPart)
-        }
-
-        configEntry.setProperty(parts[-1], value)
-        return configEntry
-    }
-
-    @SuppressWarnings("DuplicateNumberLiteral")
-    protected static void clearConfigOption(ConfigObject root, String dottedString) {
-        def parts = dottedString.split(NAME_SEPARATOR_REGEX)
-        def currentConfig = root
-        def configParts = []
-        for (part in parts) {
-            configParts << currentConfig
-            currentConfig = currentConfig.getProperty(part)
-        }
-
-        configParts[-1].remove(parts[-1])
-        if (parts.size() == 1) return
-
-        for (int i in 2..parts.size()) {
-            if (configParts[-i][parts[-i]]) break
-            configParts[-i].remove(parts[-i])
-        }
-    }
-
-    protected static ConfigObject loadDefaultConfig() {
-        def cls = this
-        return new ConfigSlurper().parse(cls.getResource("defaultConfig.groovy").text)
-    }
-
-    protected fun loadConfigFromSystemProperties(overrideConfig : Any) : Map {
-        return System.properties.findAll {
-            it.key.startsWith(SYSPROP_OVERRIDE_PREFIX)
-        }.each { String key, String value ->
-            def settingName = key[SYSPROP_OVERRIDE_PREFIX.size()..-1]
-
-            if (!validateSetting(settingName, VALID_OPTIONS, value)) {
-                log.warning "Unknown option '$settingName' or its values are invalid: ${value}"
-            }
-
-            setConfigOption overrideConfig, settingName, value
-        }
-    }
-
-    protected fun getJsonConfigFile(userConfigFile : File) : File {
-        return File(userConfigFile.getParentFile(), JSON_CONFIG_FILENAME)
-    }
-
-    /**
-     * Adds the data from a map to a given Groovy configuration object. This
-     * works recursively, so any values in the source map that are maps themselves
-     * are treated as a set of sub-keys in the configuration.
-     */
-    protected fun addConfigEntries(data : Map<String, Any>, obj : ConfigObject) {
-        data.forEach { entry ->
-            if (entry.value is Map<*, *>) {
-                addConfigEntries(entry.value as Map<String, Any>, obj.getProperty(entry.key) as ConfigObject)
-            }
-            else obj.setProperty(entry.key, entry.value)
-        }
-    }
-
-    /**
-     * <p>Takes two maps and works out which keys are shared between two maps.
-     * Crucially, this method recurses such that it checks the keys of any
-     * nested maps as well. For example, if two maps have the same keys and
-     * sub-keys such as [one: [two: "test"]], then the key "one.two" is
-     * considered to be a shared key. Note how the keys of sub-maps are
-     * referenced using dot ('.') notation.</p>
-     * @param map1 The first map.
-     * @param map2 The map to compare against the first map.
-     * @return A list of the keys that both maps share. If either map is empty
-     * or the two share no keys at all, this method returns an empty list.
-     * Sub-keys are referenced using dot notation ("my.option.override") in the
-     * same way that <tt>ConfigObject</tt> keys are converted when the settings
-     * are flattened.
-     */
-    protected fun findIntersectKeys(map1 : Map<String, Any>, map2 : Map<String, Any>) : List<String> {
-        val keys = map1.keySet().intersect(map2.keySet())
-        val result : MutableList<String> = keys.toArrayList()
-
-        for (k in keys) {
-            if (map1[k] is Map<*, *> && map2[k] is Map<*, *>) {
-                result.remove(k)
-                result.addAll(findIntersectKeys(
-                        map1[k] as Map<String, Any>,
-                        map2[k] as Map<String, Any>).map { k + NAME_SEPARATOR + it })
-            }
-        }
-
-        return result
-    }
+fun List<T>.allButLast<T>() : List<T> {
+    return this.take(this.size() - 1)
 }

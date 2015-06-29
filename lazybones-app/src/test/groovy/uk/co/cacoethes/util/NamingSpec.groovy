@@ -13,7 +13,7 @@ class NamingSpec extends Specification {
     @Unroll
     def "Convert '#name' (#inputType) to #outputType"() {
         expect: "I convert a camel-case name to hyphenated"
-        Naming.convert(name, from: inputType, to: outputType) == expected
+        Naming.INSTANCE$.convert(inputType, outputType, name) == expected
 
         where:
         inputType   |  outputType   |  name               |  expected

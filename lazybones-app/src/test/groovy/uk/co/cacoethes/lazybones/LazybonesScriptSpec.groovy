@@ -1,13 +1,12 @@
 package uk.co.cacoethes.lazybones
 
 import groovy.text.SimpleTemplateEngine
-import groovy.text.TemplateEngine
 import org.codehaus.groovy.control.CompilerConfiguration
 import org.junit.Rule
 import org.junit.rules.TemporaryFolder
 import spock.lang.Specification
 
-import static uk.co.cacoethes.lazybones.LazybonesScript.DEFAULT_ENCODING
+import static uk.co.cacoethes.lazybones.LazybonesPackage.DEFAULT_ENCODING
 
 /**
  * @author Tommy Barker
@@ -170,6 +169,6 @@ class LazybonesScriptSpec extends Specification {
     }
 
     Reader createReader(String text) {
-        new ByteArrayInputStream(text.bytes).newReader()
+        new BufferedReader(new ByteArrayInputStream(text.bytes).newReader())
     }
 }

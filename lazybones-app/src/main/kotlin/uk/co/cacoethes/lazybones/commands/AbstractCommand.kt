@@ -17,7 +17,7 @@ import java.util.logging.Logger
 abstract class AbstractCommand : Command {
     val log = Logger.getLogger(this.javaClass.getName())
 
-    override fun execute(args : List<String>, globalOptions : Map<*, *>, config : Configuration) : Int {
+    override fun execute(args : List<String>, globalOptions : Map<String, Any>, config : Configuration) : Int {
         val cmdOptions = parseArguments(args, parameterRange)
         if (cmdOptions == null) return 1
 
@@ -29,7 +29,7 @@ abstract class AbstractCommand : Command {
         return doExecute(cmdOptions, globalOptions, config)
     }
 
-    protected abstract fun doExecute(optionSet : OptionSet, globalOptions : Map<*, *>, config : Configuration) : Int
+    protected abstract fun doExecute(cmdOptions : OptionSet, globalOptions : Map<*, *>, config : Configuration) : Int
 
     /**
      * Returns the number of arguments this command can accept, on top of the

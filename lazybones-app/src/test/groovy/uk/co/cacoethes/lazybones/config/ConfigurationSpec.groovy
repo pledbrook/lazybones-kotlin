@@ -234,7 +234,7 @@ class ConfigurationSpec extends Specification {
     @Unroll
     def "Validate settings and their values based on known option names and types"() {
         when: "I validate a setting and its value"
-        def result = Configuration.validateSetting(settingName, knownSettings, settingValue)
+        def result = ConfigPackage.validateSetting(settingName, knownSettings, settingValue)
 
         then: "A list of those values that are invalid is returned"
         result == expected
@@ -257,7 +257,7 @@ class ConfigurationSpec extends Specification {
     @Unroll
     def "Handle unknown and non-leaf settings during validation (#settingName)"() {
         when: "I validate an unknown or non-leaf setting"
-        def result = Configuration.validateSetting(settingName, knownSettings, settingValue)
+        def result = ConfigPackage.validateSetting(settingName, knownSettings, settingValue)
 
         then: "The appropriate exception is thrown"
         thrown(expected)
@@ -289,7 +289,7 @@ class ConfigurationSpec extends Specification {
         config.other.option = "irrelevant other"
 
         when: "I retrieve a dotted notation setting"
-        def val = Configuration.getConfigOption(config, settingName)
+        def val = ConfigPackage.getConfigOption(config, settingName)
 
         then: "I get the expected value back, or null if it doesn't exist"
         val == expected
@@ -309,11 +309,11 @@ class ConfigurationSpec extends Specification {
         config.other.option = "irrelevant other"
 
         when: "I retrieve a dotted notation setting"
-        def val = Configuration.setConfigOption(config, settingName, newValue)
+        def val = ConfigPackage.setConfigOption(config, settingName, newValue)
 
         then: "I get the expected value back, or null if it doesn't exist"
         val.containsValue(newValue)
-        Configuration.getConfigOption(config, settingName) == newValue
+        ConfigPackage.getConfigOption(config, settingName) == newValue
 
         where:
         settingName   |     newValue
@@ -327,7 +327,7 @@ class ConfigurationSpec extends Specification {
         def config = new ConfigObject()
 
         when: "I add..."
-        Configuration.addConfigEntries(
+        ConfigPackage.addConfigEntries(
                 [test: [option: "123", num: 5], other: [custom: [setting: "test"]]],
                 config)
 
@@ -343,7 +343,7 @@ class ConfigurationSpec extends Specification {
     @Unroll
     def "Find hierarchical keys shared between two distinct maps"() {
         when: "The keys of the two maps are compared"
-        def result = Configuration.findIntersectKeys(leftMap, rightMap)
+        def result = ConfigPackage.findIntersectKeys(leftMap, rightMap)
 
         then: "The shared keys are returned as a list"
         result.sort() == expected

@@ -1,10 +1,26 @@
 package uk.co.cacoethes.lazybones.util
 
 /**
+ * Returns an identity function that simply returns a name unchanged.
+ * This must be called as a method, not a property during initialisation
+ * of the enum.
+ */
+private val identityFunction = { s: String -> s }
+
+/**
+ * Returns a special function that throws an exception if it's ever called.
+ * It should only be used by the UNKNOWN type. This must be called as a
+ * method, not a property during initialisation of the enum.
+ */
+private val unknownFunction = { s: String ->
+    throw UnsupportedOperationException("Unable to convert to or from an unknown name type")
+}
+
+/**
  * Enumeration representing the various naming conventions, including the two
  * intermediate forms: camel case and lower case hyphenated.
  */
-enum class NameType(val intermediateType : NameType?,
+enum class NameType(intermediateType : NameType?,
                     val toIntermediateFn : (String) -> String,
                     val fromIntermediateFn : (String) -> String) {
     CAMEL_CASE(),
@@ -19,22 +35,10 @@ enum class NameType(val intermediateType : NameType?,
             { s : String -> Naming.naturalToHyphenated(s) },
             { s : String -> Naming.hyphenatedToNatural(s) })
 
-    companion object {
-        /**
-         * Returns an identity function that simply returns a name unchanged.
-         * This must be called as a method, not a property during initialisation
-         * of the enum.
-         */
-        private val identityFunction = { s: String -> s }
+    val intermediateType : NameType
 
-        /**
-         * Returns a special function that throws an exception if it's ever called.
-         * It should only be used by the UNKNOWN type. This must be called as a
-         * method, not a property during initialisation of the enum.
-         */
-        private val unknownFunction = { s: String ->
-            throw UnsupportedOperationException("Unable to convert to or from an unknown name type")
-        }
+    init {
+        this.intermediateType = intermediateType ?: this
     }
 
     constructor() : this(null, identityFunction, identityFunction)
@@ -57,8 +61,6 @@ enum class NameType(val intermediateType : NameType?,
     fun fromIntermediate(s : String) : String {
         return fromIntermediateFn.invoke(s)
     }
-
-
 
     /**
      * Converts a name in property form into its corresponding intermediate

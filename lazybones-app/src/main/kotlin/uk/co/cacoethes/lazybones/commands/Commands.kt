@@ -10,7 +10,7 @@ object Commands {
     fun getAll(config : Configuration) : List<Command> {
         return listOf(
             CreateCommand(config),
-//            ConfigCommand(config),
+            ConfigCommand(config),
             GenerateCommand(),
             ListCommand(config),
             InfoCommand(),

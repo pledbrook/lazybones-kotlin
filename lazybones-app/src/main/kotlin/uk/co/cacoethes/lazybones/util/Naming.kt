@@ -24,7 +24,8 @@ object Naming {
      * @return A new string representing {@code content} in the requested
      * form.
      */
-    public fun convert(from : NameType, to : NameType, content : String) : String {
+    public fun convert(from : NameType, to : NameType, content : String?) : String? {
+        if (content == null) return null
         return NameWithType(NameType.UNKNOWN, content).from(from).to(to)
     }
 
@@ -55,11 +56,11 @@ object Naming {
         val out = StringBuilder(name.length() + 5)
         val lexer = BasicLexer(name)
 
-        out append lexer.nextWord()
-        for (part in lexer) {
-            out append '-'
-            out append part
+        lexer.iterator().asSequence().forEachIndexed { i, word ->
+            if (i > 0) out append '-'
+            out append word
         }
+
         return out.toString()
     }
 
@@ -71,8 +72,8 @@ object Naming {
         if (name.isBlank()) return name
 
         val out = StringBuilder()
-        "-([a-zA-Z0-9])".toRegex().replace(name) { m ->
-            m.groups[0]?.value?.capitalize() ?: ""
+        out append "-([a-zA-Z0-9])".toRegex().replace(name) { m ->
+            m.groups[1]?.value?.capitalize() ?: ""
         }
 
         out.replace(0, 1, name[0].toUpperCase().toString())
@@ -85,7 +86,7 @@ object Naming {
      */
     fun hyphenatedToNatural(content : String) : String {
         return content.split('-').map {
-            return it.capitalize()
+            it.capitalize()
         }.join(" ")
     }
 
@@ -95,8 +96,8 @@ object Naming {
      */
     fun naturalToHyphenated(content : String) : String {
         return content.split(' ').map {
-            if (it.length() > 1 && it[1].isUpperCase()) return it
-            else return it.toLowerCase()
+            if (it.length() > 1 && it[1].isUpperCase()) it
+            else it.toLowerCase()
         }.join("-")
     }
 
@@ -114,7 +115,7 @@ object Naming {
      */
     fun camelCaseToProperty(content : String ) : String {
         val upperBound = Math.min(content.length(), 3)
-        if (content.substring(0, upperBound-1).all { it.isUpperCase() }) {
+        if (content.substring(0, upperBound).all { it.isUpperCase() }) {
             return content
         }
         else {

@@ -5,10 +5,13 @@ import joptsimple.OptionParser
 import joptsimple.OptionSet
 import uk.co.cacoethes.lazybones.commands.Commands
 import uk.co.cacoethes.lazybones.config.Configuration
+import uk.co.cacoethes.lazybones.config.ENCODING
+import uk.co.cacoethes.lazybones.config.initConfiguration
 import uk.co.cacoethes.lazybones.util.isUrl
 import java.io.ByteArrayInputStream
 import java.io.StringWriter
 import java.net.URL
+import java.net.URLClassLoader
 import java.util.*
 import java.util.jar.Manifest
 import java.util.logging.Level
@@ -18,7 +21,7 @@ import java.util.logging.Logger
 val USAGE = "USAGE: lazybones [OPTIONS] [COMMAND]\n"
 
 fun main(args: Array<String>) {
-    val config = Configuration.initConfiguration()
+    val config = initConfiguration()
 
     val parser : OptionParser = OptionParserBuilder.makeOptionParser()
     val optionSet : OptionSet
@@ -35,12 +38,12 @@ fun main(args: Array<String>) {
     // Create a map of options from the "options.*" key in the user's
     // configuration and then add any command line options to that map,
     // overriding existing values.
-    val globalOptions : MutableMap<String, Any?> =
-            config.getSubSettings("options") as MutableMap<String, Any?>?
-                    ?: hashMapOf<String, Any?>()
+    val globalOptions : MutableMap<String, Any> =
+            config.getSubSettings("options") as MutableMap<String, Any>?
+                    ?: hashMapOf<String, Any>()
     for (spec in optionSet.specs()) {
         val valueList = spec.values(optionSet) ?: ArrayList<Any>()
-        globalOptions[spec.options().iterator().next()] = if (!valueList.isEmpty()) valueList[0] else true
+        globalOptions[spec.options().iterator().next()] = if (!valueList.isEmpty()) valueList[0]!! else true
     }
 
     if (optionSet.has(Options.VERSION)) {
@@ -65,12 +68,10 @@ fun main(args: Array<String>) {
         argsList = argsList.slice(1..-1)
     }
 
-    validateConfig(config)
-
     // Execute the corresponding command
     val cmdInstance = Commands.getAll(config).firstOrNull { it.getName() == cmd }
-    if (cmdInstance != null) {
-        Logger.getLogger("uk.co.cacoethes.lazybones.LazybonesMain").severe("There is no command '" + cmd + "'")
+    if (cmdInstance == null) {
+        println("There is no command '" + cmd + "'")
         System.exit(1)
         return
     }
@@ -83,30 +84,18 @@ fun readVersion() : String {
     // First find the MANIFEST.MF for the JAR containing this class
     //
     // Can't use this.getResource() since that looks for a static method
-    val cls = javaClass<LazybonesScript>()
-    val classPath = cls.getResource(cls.getSimpleName() + ".class").toString()
-    if (!classPath.startsWith("jar")) return "unknown"
-
-    val manifestPath = classPath.substringBeforeLast("!") + "/META-INF/MANIFEST.MF"
+    val cls = (javaClass<Commands>().getClassLoader() as URLClassLoader).findResource("META-INF/MANIFEST.MF")
 
     // Now read the manifest and extract Implementation-Version to get the
     // Lazybones version.
-    val manifest = Manifest(URL(manifestPath).openStream())
+    val manifest = Manifest(cls.openStream())
     return manifest.getMainAttributes().getValue("Implementation-Version")
-}
-
-fun validateConfig(config : Configuration) : Unit {
-    config.getSubSettings("templates.mappings").forEach { entry ->
-        if (!isUrl(entry.value as String)) {
-            throw IllegalArgumentException("the value [${entry.value}] for mapping [${entry.key}] is not a url")
-        }
-    }
 }
 
 fun initLogging(options : Map<String, Any?>) : Unit {
     // Load a basic logging configuration from a string containing Java
     // properties syntax.
-    val inputStream = ByteArrayInputStream(LOG_CONFIG.toByteArray(Configuration.getENCODING()))
+    val inputStream = ByteArrayInputStream(LOG_CONFIG.toByteArray(ENCODING))
     LogManager.getLogManager().readConfiguration(inputStream)
 
     // Update logging level based on the global options. We temporarily
@@ -115,9 +104,9 @@ fun initLogging(options : Map<String, Any?>) : Unit {
     // from this parent).
     val parentLogger = Logger.getLogger("uk.co.cacoethes.lazybones")
 
-    if (options[Options.VERBOSE_SHORT] as Boolean) parentLogger.setLevel(Level.FINEST)
-    else if (options[Options.QUIET] as Boolean) parentLogger.setLevel(Level.WARNING)
-    else if (options[Options.INFO] as Boolean) parentLogger.setLevel(Level.INFO)
+    if (options[Options.VERBOSE_SHORT] as Boolean? ?: false) parentLogger.setLevel(Level.FINEST)
+    else if (options[Options.QUIET] as Boolean? ?: false) parentLogger.setLevel(Level.WARNING)
+    else if (options[Options.INFO] as Boolean? ?: false) parentLogger.setLevel(Level.INFO)
     else if (options[Options.LOG_LEVEL] != null) {
         try {
             parentLogger.setLevel(Level.parse(options[Options.LOG_LEVEL].toString()))
